@@ -1,7 +1,8 @@
 import torch
-from water.basic_functions import ppaths, save_yaml, open_yaml
+from water.basic_functions import save_yaml, open_yaml
+from water.paths import ppaths
 from water.training.print_info import TrainingInfoPrinter
-from water.loss_functions.loss_functions import MyLossType
+from water.loss_functions.loss_functions import BaseLossType
 import pandas as pd
 import os
 import numpy as np
@@ -9,9 +10,21 @@ from pathlib import Path
 import importlib
 
 
+"""
+This project was originally birthed from a separate more general computer vision project. In the more general project,
+GAN models were being used, and it was desirable to have a single object that could deal with multiple models. Since
+we are only ever using a single model in this project, the model container is way more complex than it needs to be,
+but refactoring the code to only deal with a single model is unnecessary at this point.
+
+Further, the original goal was to have a model container for training and a model container for evaluation, but since
+the training container does everything that an evaluation container would need to do, and doesn't require much more in
+terms of memory, I simply use the training container everywhere.
+"""
+
+
 def get_most_recent_epoch_checkpoint_path(
         model_name: str,
-        base_path: Path = ppaths.waterway / 'model_data',
+        base_path: Path = ppaths.training_data / 'model_data',
         model_number: int = None,
         epoch: int = None
 ):
@@ -48,7 +61,7 @@ def get_most_recent_epoch_checkpoint_path(
     return most_recent_file, checkpoint_num
 
 
-def get_most_recent_model_number(data_dir: Path = ppaths.waterway / 'model_data'):
+def get_most_recent_model_number(data_dir: Path = ppaths.training_data / 'model_data'):
     """
     Get the most recent model number from a directory.
 
@@ -68,7 +81,7 @@ def get_most_recent_model_number(data_dir: Path = ppaths.waterway / 'model_data'
 
 
 def get_most_recent_epoch(model_number, model_name: str = 'wwm',
-                          base_path: Path = ppaths.waterway / f'model_data'
+                          base_path: Path = ppaths.training_data / f'model_data'
                           ):
     """
     Get the most recent epoch for a specific model.
@@ -126,7 +139,7 @@ class ModelLogs(dict):
                                optimizer_kwargs: dict,
                                scheduler_class,
                                scheduler_kwargs: dict,
-                               loss_class: MyLossType,
+                               loss_class: BaseLossType,
                                loss_kwargs: dict,
                                min_max: str,
                                step_metric: str
@@ -170,7 +183,7 @@ class ModelDict(dict[str, torch.nn.Module]):
             self.zero_grad(model_name)
 
 
-class LossDict(dict[str, MyLossType]):
+class LossDict(dict[str, BaseLossType]):
     def clear_model_loss_list_dict(self, model_name):
         self[model_name].clear_lld()
 
@@ -223,7 +236,7 @@ class ScheduleDict(dict):
 
 
 class ModelContainer:
-    def __init__(self, model_number: int, base_path: Path = ppaths.waterway / 'model_data'):
+    def __init__(self, model_number: int, base_path: Path = ppaths.training_data / 'model_data'):
         self.model_number = model_number
         if not base_path.exists():
             base_path.mkdir()
@@ -285,38 +298,10 @@ class ModelContainer:
 
 
 class ModelContainerFactory:
-    def __init__(self, base_path: Path = ppaths.waterway / 'model_data'):
+    def __init__(self, base_path: Path = ppaths.training_data / 'model_data'):
         self.base_path = base_path
 
-    @staticmethod
-    def add_optimizer(model_container: ModelContainer, model_name: str,
-                      model: torch.nn.Module,
-                      optimizer_kwargs: dict,
-                      optimizer_class
-                      ):
-        model_container.optimizer_dict[model_name] = optimizer_class(
-            model.parameters(), **optimizer_kwargs
-        )
-        return model_container.optimizer_dict[model_name]
-
-    @staticmethod
-    def add_loss(model_container, model_name: str, loss_class: MyLossType, loss_kwargs: dict):
-        model_container.loss_dict[model_name] = loss_class(**loss_kwargs)
-        return model_container.loss_dict[model_name]
-
-    @staticmethod
-    def add_scheduler(model_container, model_name: str, step_metric: str,
-                      schedular_kwargs: dict, schedular_class):
-        model_container.schedule_dict[model_name] = schedular_class(**schedular_kwargs)
-        model_container.schedule_dict.step_metrics[model_name] = step_metric
-        return model_container.schedule_dict[model_name]
-
-    @staticmethod
-    def add_model(model_container, model_name, model_kwargs, model_class):
-        model_container.model_dict[model_name] = model_class(**model_kwargs)
-        return model_container.model_dict[model_name]
-
-    def add_all(self, model_container: ModelContainer, model_name: str,
+    def _build_container(self, model_container: ModelContainer, model_name: str,
                 model_class, model_kwargs: dict,
                 loss_class, loss_kwargs: dict,
                 optimizer_class=None, optimizer_kwargs: dict = None,
@@ -329,24 +314,18 @@ class ModelContainerFactory:
         scheduler_class, scheduler_kwargs = self.get_scheduler_class_kwargs(
             scheduler_class=scheduler_class, scheduler_kwargs=scheduler_kwargs, min_max=min_max
         )
-        model = self.add_model(
-            model_container=model_container, model_name=model_name,
-            model_kwargs=model_kwargs, model_class=model_class
-        )
-        optimizer = self.add_optimizer(
-            model_name=model_name, model_container=model_container, model=model,
-            optimizer_class=optimizer_class, optimizer_kwargs=optimizer_kwargs
-        )
+        model = model_class(**model_kwargs)
+        model_container.model_dict[model_name] = model
+        optimizer = optimizer_class(model.parameters(), **optimizer_kwargs)
+        model_container.optimizer_dict[model_name] = optimizer
+
         scheduler_kwargs['optimizer'] = optimizer
-        self.add_scheduler(
-            model_name=model_name, model_container=model_container,
-            schedular_kwargs=scheduler_kwargs, schedular_class=scheduler_class,
-            step_metric=step_metric,
-        )
-        loss = self.add_loss(
-            model_container=model_container, model_name=model_name,
-            loss_class=loss_class, loss_kwargs=loss_kwargs
-        )
+        model_container.schedule_dict[model_name] = scheduler_class(**scheduler_kwargs)
+        model_container.schedule_dict.step_metrics[model_name] = step_metric
+
+        loss = loss_class(**loss_kwargs)
+        model_container.loss_dict[model_name] = loss
+
         model_container.model_names.add(model_name)
         model_container.total_dict[model_name] = []
         model_container.printer_dict[model_name] = TrainingInfoPrinter(
@@ -383,7 +362,7 @@ class ModelContainerFactory:
             model_number = get_most_recent_model_number(self.base_path) + 1
         model_container = ModelContainer(model_number=model_number, base_path=self.base_path)
         for model_name, input_dict in inputs.items():
-            model_container = self.add_all(
+            model_container = self._build_container(
                 model_name=model_name, model_container=model_container, **input_dict
             )
         model_path = self.base_path / f'model_{model_number}'
@@ -594,7 +573,7 @@ class ModelTrainingContainer:
                     dtype=torch.bfloat16,
                     num_epochs=50,
                     is_terminal=True,
-                    base_path: Path = ppaths.waterway / 'model_data',
+                    base_path: Path = ppaths.training_data / 'model_data',
                     **kwargs):
         factory = ModelContainerFactory(base_path=base_path)
         print('making container')
@@ -610,7 +589,7 @@ class ModelTrainingContainer:
 
     @classmethod
     def load_container(cls, model_number: int, epoch=None,
-                       ckpt=None, base_path: Path = ppaths.waterway / 'model_data',
+                       ckpt=None, base_path: Path = ppaths.training_data / 'model_data',
                        device='cuda', dtype=torch.bfloat16, is_terminal=True, num_epochs=1,
                        ):
         factory = ModelContainerFactory(base_path=base_path)
@@ -630,7 +609,7 @@ class ModelTrainingContainer:
                        copy_lr_scheduler: bool = False,
                        copy_total_list: bool = False,
                        epoch=None, ckpt=None,
-                       base_path: Path = ppaths.waterway / 'model_data',
+                       base_path: Path = ppaths.training_data / 'model_data',
                        device='cuda', dtype=torch.bfloat16, is_terminal=True,
                        num_epochs=1,
                        ):

@@ -1,13 +1,6 @@
-import json
-import time
-import matplotlib
-# matplotlib.use('TkAgg')
-import matplotlib.pyplot as plt
-
-from water.basic_functions import (ppaths, multi_download, my_pool, geometrylike,
-                                   tt, time_elapsed, get_country_bounding_box, file_name_to_bbox,
-                                   name_to_box, get_country_polygon, get_multipolygon_max_polygon)
-import logging
+from water.basic_functions import (SharedMemoryPool, geometrylike, tt, time_elapsed,
+                                   get_country_bounding_box, get_country_polygon)
+from water.paths import ppaths
 import numpy as np
 import planetary_computer as pc
 import pystac_client
@@ -16,46 +9,24 @@ import xarray
 import geopandas as gpd
 import rasterio as rio
 from rasterio import features
-import rioxarray as rxr
-from rasterio import warp
 from pathlib import Path
-import yaml
 import os
-import subprocess
 import shapely
 import warnings
 from dataclasses import dataclass
-from abc import ABC, abstractmethod
+
 warnings.filterwarnings(action='ignore', category=UserWarning)
-# warnings.filterwarnings(action='error', category=RuntimeWarning)
 
 planetary_computer_stac = "https://planetarycomputer.microsoft.com/api/stac/v1"
-from pprint import pprint
+
 
 def get_item_scl(item, bbox):
-    # pprint(item.__dict__)
-    # box = item.bbox
-    # print('item bbox:', box)
-    # print(item.assets['rendered_preview'])
-    # bbox = (max(box[0], -180), max(box[1], -90), min(box[2], 180), min(box[3], 90))
-    # bbox = (max(box[0], -180), max(box[1], -90), min(box[2], 180), min(box[3], 90))
-
-    # scl = stackstac.stack(
-    #         items=[pc.sign(item).to_dict()], assets=["SCL"],
-    #         sortby_date=False, epsg=4326
-    # ).fillna(0).where(lambda x: x.isin([2, 4, 5, 6, 7, 11]), other=0).astype(np.uint8)[0].persist()
     scl = stackstac.stack(
             items=[pc.sign(item).to_dict()], assets=["SCL"],
             sortby_date=False, epsg=4326, bounds_latlon=bbox
     ).fillna(0).where(lambda x: x.isin([2, 4, 5, 6, 7, 11]), other=0).astype(np.uint8)[0].persist()
-    # scl = stackstac.stack(
-    #         items=[pc.sign(item).to_dict()], assets=["SCL"],
-    #         sortby_date=False, bounds_latlon=bbox
-    # ).fillna(0).where(lambda x: x.isin([2, 4, 5, 6, 7, 11]), other=0).astype(np.uint8)[0].persist()
     scl = scl.where(scl == 0, other=1)
-    # print('\t', scl.shape, bbox)
     return scl
-
 
 
 @dataclass
@@ -66,9 +37,8 @@ class CloudSearchInfo:
     
     def step(self):
         return CloudSearchInfo(
-                cloud_percent=min(self.max_cloud_percent, self.cloud_percent + self.step_size),
-                max_cloud_percent=self.max_cloud_percent,
-                step_size=self.step_size
+            cloud_percent=min(self.max_cloud_percent, self.cloud_percent + self.step_size),
+            max_cloud_percent=self.max_cloud_percent, step_size=self.step_size
         )
 
 
@@ -100,8 +70,7 @@ class ItemFinder:
     def make_query(self, cloud_percent):
         return {'eo:cloud_cover': {'lt': cloud_percent}}
     
-    # @staticmethod
-    def get_item_array(self, item, remove_clouds=False):
+    def get_item_array(self, item):
         item_array = get_item_scl(item, self.geometry.bounds)
         return item_array
     
@@ -143,11 +112,8 @@ class ItemFinder:
         self.percent_found = self.array.sum()/self.total
 
 
-    def check_possible_items(self, possible_items, remove_clouds=False):
-        # print(len(possible_items))
-        # from pprint import pprint
+    def check_possible_items(self, possible_items):
         for item in possible_items:
-            # pprint(pc.sign(item).to_dict() )
             gran_id = item.properties['s2:granule_id']
             if not gran_id in self._seen:
                 self._seen[gran_id] = True
@@ -166,9 +132,6 @@ class ItemFinder:
                         self.items.append(item)
                     if 1 - self.percent_found < 1e-4 or len(self.items) >= self.max_items:
                         return self.items
-                # else:
-                #     tile_id = item.properties['s2:mgrs_tile']
-                #     print(f'{tile_id}, {item.bbox}, {tuple(self.geometry.bounds)}')
         return self.items
 
     def find_items(
@@ -176,7 +139,7 @@ class ItemFinder:
             cloud_info: CloudSearchInfo = CloudSearchInfo(1, 10, 5), remove_clouds=True, is_init=True
     ):
         possible_items = self.search_items(time_of_interest, cloud_info.cloud_percent)
-        self.check_possible_items(possible_items=possible_items, remove_clouds=remove_clouds)
+        self.check_possible_items(possible_items=possible_items)
         if not (1 - self.percent_found < self.max_percent_remaining/5 or len(self.items) >= self.max_items):
             if cloud_info.cloud_percent < cloud_info.max_cloud_percent:
                 cloud_info = cloud_info.step()
@@ -248,7 +211,6 @@ def shift_color(data, means, stds):
 def shift_color_full(sen_data):
     scl = sen_data[:, 4]
     sen_data = sen_data[:, 0:4, :, :].astype(np.float32)
-    # sen_data = sen_data.mean(dim='time', skipna=True)
     sen_data = sen_data.where(sen_data > 0, other=np.nan)
     means = sen_data.where(scl.isin([2, 4, 5, 6, 7, 11]), other=np.nan).mean(dim=('y', 'x'), skipna=True)
     stds = sen_data.where(scl.isin([2, 4, 5, 6, 7, 11]), other=np.nan).std(dim=('y', 'x'), skipna=True)
@@ -258,17 +220,15 @@ def shift_color_full(sen_data):
 
 def download_sentinel_by_tile(
         tile: str, tile_geometry: shapely.Polygon, time_of_interest: str = '2016-01-01/2023-12-30',
-        save_dir_path: Path = ppaths.waterway / f'country_data/sentinel_tiles',
+        save_dir_path: Path = ppaths.training_data / f'country_data/sentinel_tiles',
         catalog=None, cloud_info=CloudSearchInfo(1, 50, 10), max_items=6, min_year=2020,
         min_intersection_percent=.1, max_percent_remaining=.05
 ):
     gw, gs, ge, gn = tile_geometry.bounds
-    # print(tile_geometry.bounds)
     save_subdir = f'bbox_{gw}_{gs}_{ge}_{gn}'
     save_path = save_dir_path / save_subdir
-    storage_path = ppaths.waterway/f'waterway_storage/sentinel_4326'
+    storage_path = ppaths.training_data/f'waterway_storage/sentinel_4326'
     storage_subdir = storage_path/save_subdir
-    text_file = save_path / 'file_names.txt'
     if not save_path.exists():
         save_path.mkdir()
     if not (storage_path/f'{gw}_{gs}_{ge}_{gw}.tif').exists():
@@ -304,28 +264,10 @@ def download_sentinel_by_tile(
                     scl_save_as = save_path/f'{id}_scl.tif'
                     save(data=item_data, save_path=save_as, crs=crs, transform=transform)
                     save(data=scl_data, save_path=scl_save_as, crs=crs, transform=transform)
-                    # if not (storage_path/save_as).exists():
-                    #     save(data=item_data, save_path=save_as, crs=crs, transform=transform)
-                    #     save(data=scl_data, save_path=scl_save_as, crs=crs, transform=transform)
-                # storage_path = ppaths.waterway/f'waterway_storage/sentinel_tiles'
-                # subprocess.run([f'cp -r {save_path} {storage_path}'], shell=True)
-                # os.system(f'cp -r --no-preserve=mode,ownership {save_path} {storage_path}')
-            # for path in other_items:
-            #     item_name = path.name
-            #     scl_name = item_name.replace('.tif', '_scl.tif')
-            #     scl_path = path.parent / scl_name
-            #     if not (save_path/item_name).exists():
-            #         subprocess.run([f'cp {path} {save_path/item_name}'], shell=True)
-            #     if not (save_path/scl_name).exists():
-            #         subprocess.run([f'cp {scl_path} {save_path/scl_name}'], shell=True)
-            #
-            # for file in (storage_subdir).iterdir():
-            #     if not (save_path/file.name).exists():
-            #         os.remove(file)
 
 
 def get_tiles_for_polygon(polygon):
-    country_data = ppaths.waterway/'country_data'
+    country_data = ppaths.training_data/'country_data'
     world_tiles = gpd.read_parquet(country_data/'sentinel2_tile_shapes/tiles.parquet')
     str_tree = shapely.STRtree(world_tiles.geometry)
     to_return = world_tiles.loc[str_tree.query(polygon.buffer(.15), predicate='intersects')]
@@ -339,7 +281,6 @@ def get_tiles_for_country(country):
         bbox = get_country_polygon(country)
     except:
         bbox = get_country_bounding_box(country)
-        # print(bbox)
         bbox = shapely.box(*bbox)
     to_return = get_tiles_for_polygon(bbox)
     return to_return
@@ -361,12 +302,12 @@ def get_tiles_for_continent(continent: str):
 
 def download_tile_list(
         tile_name_geometry_list, num_proc, time_of_interest=f'2023-01-01/2023-06-30',
-        save_dir_path=ppaths.country_data/'sentinel_4326', **kwargs
+        save_dir_path=ppaths.evaluation_data/'sentinel_4326', **kwargs
 ):
     inputs = []
     tiles_seen = set()
     save_subdirs_seen = set(
-        [file.name.split('.tif')[0] for file in (ppaths.waterway/'waterway_storage/sentinel_4326').iterdir()
+        [file.name.split('.tif')[0] for file in (ppaths.training_data/'waterway_storage/sentinel_4326').iterdir()
          ]
     )
     print(f'num seen: {len(save_subdirs_seen)}')
@@ -390,10 +331,10 @@ def download_tile_list(
     print(len(inputs))
     np.random.shuffle(inputs)
     if num_proc > 1:
-        my_pool(
+        SharedMemoryPool(
             func=download_sentinel_by_tile, input_list=inputs, time_out=300,
             num_proc=num_proc, use_kwargs=True, terminate_on_error=False
-        )
+        ).run()
     else:
         for input in inputs:
             download_sentinel_by_tile(**input)
@@ -401,7 +342,7 @@ def download_tile_list(
 
 def download_country_tiles(country, num_proc,
                            time_of_interest=f'2023-01-01/2023-06-30',
-                           save_dir_path=ppaths.country_data/'sentinel_4326',
+                           save_dir_path=ppaths.evaluation_data/'sentinel_4326',
                            **kwargs
                            ):
     if not save_dir_path.exists():
@@ -412,7 +353,7 @@ def download_country_tiles(country, num_proc,
 
 def download_country_list_tiles(country_list, num_proc,
                                 time_of_interest=f'2023-01-01/2023-06-30',
-                                save_dir_path=ppaths.country_data/'sentinel_4326',
+                                save_dir_path=ppaths.evaluation_data/'sentinel_4326',
                                 **kwargs
                                 ):
     if not save_dir_path.exists():
@@ -426,7 +367,7 @@ def download_country_list_tiles(country_list, num_proc,
 
 def download_continent_tiles(continent, num_proc,
                              time_of_interest=f'2023-01-01/2023-06-30',
-                             save_dir_path=ppaths.country_data/'sentinel_4326',
+                             save_dir_path=ppaths.evaluation_data/'sentinel_4326',
                              **kwargs
                              ):
     if not save_dir_path.exists():
@@ -461,7 +402,7 @@ if __name__ == '__main__':
     from water.basic_functions import wait_n_seconds
     # inputs = dict(
     #     num_proc=8, time_of_interest='2023-03-01/2023-10-30',
-    #     save_dir_path=ppaths.country_data / 'sentinel_tiles_africa',
+    #     save_dir_path=ppaths.evaluation_data / 'sentinel_tiles_africa',
     #     cloud_info=CloudSearchInfo(1, 50, 10),
     #     max_items=6, min_year=2020, min_intersection_percent=.4,
     #     max_percent_remaining=.9
@@ -471,7 +412,7 @@ if __name__ == '__main__':
     # inputs = dict(
     #     continent='Africa',
     #     num_proc=8, time_of_interest='2023-01-01/2023-12-30',
-    #     save_dir_path=ppaths.country_data / 'sentinel_tiles_africa',
+    #     save_dir_path=ppaths.evaluation_data / 'sentinel_tiles_africa',
     #     cloud_info=CloudSearchInfo(1, 50, 10),
     #     max_items=4, min_year=2022, min_intersection_percent=.5,
     #     max_percent_remaining=.01
@@ -481,7 +422,7 @@ if __name__ == '__main__':
     # inputs = dict(
     #     continent='Africa',
     #     num_proc=8, time_of_interest='2023-01-01/2023-12-30',
-    #     save_dir_path=ppaths.country_data / 'sentinel_tiles_africa',
+    #     save_dir_path=ppaths.evaluation_data / 'sentinel_tiles_africa',
     #     cloud_info=CloudSearchInfo(1, 50, 10),
     #     max_items=4, min_year=2022, min_intersection_percent=.5,
     #     max_percent_remaining=.03
@@ -491,7 +432,7 @@ if __name__ == '__main__':
     # inputs = dict(
     #     continent='Africa',
     #     num_proc=8, time_of_interest='2023-01-01/2023-12-30',
-    #     save_dir_path=ppaths.country_data / 'sentinel_tiles_africa',
+    #     save_dir_path=ppaths.evaluation_data / 'sentinel_tiles_africa',
     #     cloud_info=CloudSearchInfo(1, 50, 10),
     #     max_items=4, min_year=2022, min_intersection_percent=.5,
     #     max_percent_remaining=.05
@@ -501,7 +442,7 @@ if __name__ == '__main__':
     # inputs = dict(
     #     continent='Africa',
     #     num_proc=8, time_of_interest='2023-01-01/2023-12-30',
-    #     save_dir_path=ppaths.country_data / 'sentinel_tiles_africa',
+    #     save_dir_path=ppaths.evaluation_data / 'sentinel_tiles_africa',
     #     cloud_info=CloudSearchInfo(1, 50, 10),
     #     max_items=4, min_year=2022, min_intersection_percent=.5,
     #     max_percent_remaining=.1
@@ -511,7 +452,7 @@ if __name__ == '__main__':
     # inputs = dict(
     #     continent='Africa',
     #     num_proc=8, time_of_interest='2023-01-01/2023-12-30',
-    #     save_dir_path=ppaths.country_data / 'sentinel_tiles_africa',
+    #     save_dir_path=ppaths.evaluation_data / 'sentinel_tiles_africa',
     #     cloud_info=CloudSearchInfo(1, 50, 10),
     #     max_items=4, min_year=2022, min_intersection_percent=.5,
     #     max_percent_remaining=.2
@@ -521,7 +462,7 @@ if __name__ == '__main__':
     # inputs = dict(
     #     continent='Africa',
     #     num_proc=8, time_of_interest='2023-01-01/2023-12-30',
-    #     save_dir_path=ppaths.country_data / 'sentinel_tiles_africa',
+    #     save_dir_path=ppaths.evaluation_data / 'sentinel_tiles_africa',
     #     cloud_info=CloudSearchInfo(1, 50, 10),
     #     max_items=4, min_year=2022, min_intersection_percent=.5,
     #     max_percent_remaining=.5
@@ -534,7 +475,7 @@ if __name__ == '__main__':
     # inputs = dict(
     #     continent='Europe',
     #     num_proc=8, time_of_interest='2023-03-01/2023-10-30',
-    #     save_dir_path=ppaths.country_data / 'sentinel_tiles_europe',
+    #     save_dir_path=ppaths.evaluation_data / 'sentinel_tiles_europe',
     #     cloud_info=CloudSearchInfo(1, 50, 10),
     #     max_items=4, min_year=2022, min_intersection_percent=.5,
     #     max_percent_remaining=.01
@@ -544,7 +485,7 @@ if __name__ == '__main__':
     # inputs = dict(
     #     continent='Europe',
     #     num_proc=8, time_of_interest='2023-03-01/2023-10-30',
-    #     save_dir_path=ppaths.country_data / 'sentinel_tiles_europe',
+    #     save_dir_path=ppaths.evaluation_data / 'sentinel_tiles_europe',
     #     cloud_info=CloudSearchInfo(1, 50, 10),
     #     max_items=4, min_year=2022, min_intersection_percent=.5,
     #     max_percent_remaining=.03
@@ -555,7 +496,7 @@ if __name__ == '__main__':
     # inputs = dict(
     #     continent='Europe',
     #     num_proc=8, time_of_interest='2023-03-01/2023-10-30',
-    #     save_dir_path=ppaths.country_data / 'sentinel_tiles_europe',
+    #     save_dir_path=ppaths.evaluation_data / 'sentinel_tiles_europe',
     #     cloud_info=CloudSearchInfo(1, 50, 10),
     #     max_items=4, min_year=2022, min_intersection_percent=.5,
     #     max_percent_remaining=.05
@@ -566,7 +507,7 @@ if __name__ == '__main__':
     # inputs = dict(
     #     continent='Europe',
     #     num_proc=8, time_of_interest='2023-03-01/2023-10-30',
-    #     save_dir_path=ppaths.country_data / 'sentinel_tiles_europe',
+    #     save_dir_path=ppaths.evaluation_data / 'sentinel_tiles_europe',
     #     cloud_info=CloudSearchInfo(1, 50, 10),
     #     max_items=4, min_year=2022, min_intersection_percent=.5,
     #     max_percent_remaining=.1
@@ -577,7 +518,7 @@ if __name__ == '__main__':
     # inputs = dict(
     #     continent='Europe',
     #     num_proc=8, time_of_interest='2023-03-01/2023-10-30',
-    #     save_dir_path=ppaths.country_data / 'sentinel_tiles_europe',
+    #     save_dir_path=ppaths.evaluation_data / 'sentinel_tiles_europe',
     #     cloud_info=CloudSearchInfo(1, 50, 10),
     #     max_items=4, min_year=2022, min_intersection_percent=.5,
     #     max_percent_remaining=.2
@@ -587,7 +528,7 @@ if __name__ == '__main__':
     # inputs = dict(
     #     continent='Europe',
     #     num_proc=8, time_of_interest='2023-03-01/2023-10-30',
-    #     save_dir_path=ppaths.country_data / 'sentinel_tiles_europe',
+    #     save_dir_path=ppaths.evaluation_data / 'sentinel_tiles_europe',
     #     cloud_info=CloudSearchInfo(1, 50, 10),
     #     max_items=4, min_year=2022, min_intersection_percent=.5,
     #     max_percent_remaining=.5
@@ -604,9 +545,9 @@ if __name__ == '__main__':
     #     'jammu-kashmir', 'aksai chin', 'arunachal pradesh'
     # ]
     # tiles = list(get_tiles_for_polygon(polygon))
-    # storage_dir = ppaths.waterway/'waterway_storage/sentinel_tiles_america'
+    # storage_dir = ppaths.training_data/'waterway_storage/sentinel_tiles_america'
     # tiles_keep = []
-    # save_dir = ppaths.country_data/'sentinel_tiles_america'
+    # save_dir = ppaths.evaluation_data/'sentinel_tiles_america'
     # for tile_name, tile_geometry in tiles:
     #     gw, gs, ge, gn = tile_geometry.bounds
     #     save_subdir = f'bbox_{gw}_{gs}_{ge}_{gn}'
@@ -620,7 +561,7 @@ if __name__ == '__main__':
     #     tile_name_geometry_list=tiles_keep,
     #     num_proc=8,
     #     time_of_interest='2023-03-01/2023-9-30',
-    #     save_dir_path=ppaths.country_data/'sentinel_tiles_america'
+    #     save_dir_path=ppaths.evaluation_data/'sentinel_tiles_america'
     # )
 
     world_data = gpd.read_parquet(ppaths.country_lookup_data/'world_boundaries.parquet')
@@ -640,7 +581,7 @@ if __name__ == '__main__':
 
     download_inputs = dict(
         num_proc=8, time_of_interest='2023-01-01/2023-12-30',
-        save_dir_path=ppaths.country_data / 'sentinel_tiles_africa',
+        save_dir_path=ppaths.evaluation_data / 'sentinel_tiles_africa',
         cloud_info=CloudSearchInfo(1, 90, 10),
         max_items=4, min_year=2023, min_intersection_percent=.03,
         max_percent_remaining=.99
@@ -650,7 +591,7 @@ if __name__ == '__main__':
 
     download_inputs = dict(
         num_proc=8, time_of_interest='2023-01-01/2023-12-30',
-        save_dir_path=ppaths.country_data / 'sentinel_tiles_africa',
+        save_dir_path=ppaths.evaluation_data / 'sentinel_tiles_africa',
         cloud_info=CloudSearchInfo(1, 90, 10),
         max_items=4, min_year=2022, min_intersection_percent=.03,
         max_percent_remaining=.99

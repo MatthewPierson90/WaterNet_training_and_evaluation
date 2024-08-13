@@ -9,7 +9,7 @@ from pathlib import Path
 
 
 def get_dir_paths(index):
-    data_path = ppaths.waterway / f'model_inputs_{index}'
+    data_path = ppaths.training_data / f'model_inputs_{index}'
     input_paths = data_path / 'input_data'
     test_paths = data_path / 'test_data'
     val_paths = data_path / 'val_data'
@@ -21,11 +21,11 @@ def get_dir_paths(index):
 
 
 def make_val_test_lists(file_names):
-    with open(ppaths.waterway/'test_file_list.txt', 'w') as f:
+    with open(ppaths.training_data/'test_file_list.txt', 'w') as f:
         for file_name in file_names[:5000]:
             f.write(f'{file_name}\n')
 
-    with open(ppaths.waterway/'val_file_list.txt', 'w') as f:
+    with open(ppaths.training_data/'val_file_list.txt', 'w') as f:
         for file_name in file_names[5000:10000]:
             f.write(f'{file_name}\n')
 
@@ -54,9 +54,9 @@ def move_files_in_file_list_file(file_list_file: Path, new_dir: Path, old_dir: P
 
 def move_files_for_index(index):
     data_path, input_paths, test_paths, val_paths = get_dir_paths(index)
-    test_file = ppaths.waterway/'test_file_list.txt'
+    test_file = ppaths.training_data/'test_file_list.txt'
     move_files_in_file_list_file(test_file, new_dir=test_paths, old_dir=input_paths)
-    val_file = ppaths.waterway / 'val_file_list.txt'
+    val_file = ppaths.training_data / 'val_file_list.txt'
     move_files_in_file_list_file(val_file, new_dir=val_paths, old_dir=input_paths)
 
 
@@ -76,9 +76,9 @@ def check_and_remove(dir_path, file_set: set):
 
 def fix_missing_elevation(index):
     data_path, input_paths, test_paths, val_paths = get_dir_paths(index)
-    el_names = get_file_name_set(ppaths.waterway/'elevation_cut')
+    el_names = get_file_name_set(ppaths.training_data/'elevation_cut')
     check_and_remove(input_paths, el_names)
-    el_names = get_file_name_set(ppaths.waterway/'waterways_burned')
+    el_names = get_file_name_set(ppaths.training_data/'waterways_burned')
     check_and_remove(input_paths, el_names)
 
 
@@ -104,7 +104,7 @@ def fix_missing_sentienl(index):
 
 def select_random_hu4_indices():
     index_list = []
-    dir_path = ppaths.waterway/f'model_inputs_832/hu4_vectorized_with_order'
+    dir_path = ppaths.training_data/f'model_inputs_832/hu4_vectorized_with_order'
     for i in range(100, 1900, 100):
         print(i)
         keep_going = True
@@ -138,15 +138,15 @@ def find_files_intersecting_index_list(index_list: list, file_dir: Path) -> list
 
 def make_hu4_val_data():
     hu4_index_list = select_random_hu4_indices()
-    with open(ppaths.waterway/'val_hu4_indices.txt', 'w') as f:
+    with open(ppaths.training_data/'val_hu4_indices.txt', 'w') as f:
         f.write('hu4_indices\n')
         for hu4_index in hu4_index_list:
             f.write(f'{hu4_index}\n')
     file_paths = find_files_intersecting_index_list(
-        index_list=hu4_index_list, file_dir=ppaths.waterway/'model_inputs_832/input_data'
+        index_list=hu4_index_list, file_dir=ppaths.training_data/'model_inputs_832/input_data'
     )
     print(len(file_paths))
-    val_file = ppaths.waterway/'val_file_list.txt'
+    val_file = ppaths.training_data/'val_file_list.txt'
     with open(val_file, 'w') as f:
         for file_path in file_paths:
             f.write(f'{file_path.name}\n')
@@ -162,11 +162,11 @@ if __name__ == '__main__':
     # make_hu4_val_data()
     # s = tt()
     # il = select_random_hu4_indices()
-    # intersecting_files = find_files_intersecting_index_list(il, file_dir=ppaths.waterway/'model_inputs_832/input_data')
+    # intersecting_files = find_files_intersecting_index_list(il, file_dir=ppaths.training_data/'model_inputs_832/input_data')
     # print(len(intersecting_files))
     # time_elapsed(s, 0)
     # print(il)
-    # names = list(get_file_name_set(ppaths.waterway/'model_inputs_224/input_data'))
+    # names = list(get_file_name_set(ppaths.training_data/'model_inputs_224/input_data'))
     # np.random.shuffle(names)
     # make_val_test_lists(names)
     # move_files_for_index(832)
@@ -176,7 +176,7 @@ if __name__ == '__main__':
     # move_files_for_index(224)
     # fix_missing_sentienl(832)
     from water.basic_functions import delete_directory_contents
-    for dir in (ppaths.waterway/'model_inputs_832/input_data').iterdir():
+    for dir in (ppaths.training_data/'model_inputs_832/input_data').iterdir():
         for subdir in dir.iterdir():
             if len(list(subdir.iterdir())) < 3:
                 delete_directory_contents(subdir)
@@ -185,7 +185,7 @@ if __name__ == '__main__':
                 # break
         if len(list(dir.iterdir())) == 0:
             dir.rmdir()
-    for dir in (ppaths.waterway/'model_inputs_832/test_data').iterdir():
+    for dir in (ppaths.training_data/'model_inputs_832/test_data').iterdir():
         for subdir in dir.iterdir():
             if len(list(subdir.iterdir())) < 3:
                 delete_directory_contents(subdir)
@@ -195,7 +195,7 @@ if __name__ == '__main__':
         if len(list(dir.iterdir())) == 0:
             dir.rmdir()
 
-    for dir in (ppaths.waterway/'model_inputs_832/val_data').iterdir():
+    for dir in (ppaths.training_data/'model_inputs_832/val_data').iterdir():
         for subdir in dir.iterdir():
             if len(list(subdir.iterdir())) < 3:
                 delete_directory_contents(subdir)

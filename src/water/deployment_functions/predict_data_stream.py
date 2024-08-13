@@ -1,32 +1,23 @@
 import torch
-# from water.training.model_container import ModelContainer, load_model_container
 from water.training.model_container import ModelTrainingContainer
-from water.make_country_waterways.merge_prepared_data import open_all_and_merge
-from water.make_country_waterways.cut_data import cut_data_to_match_file_list
+from water.deployment_functions.merge_prepared_data import open_all_and_merge
+from water.deployment_functions.cut_data import cut_data_to_match_file_list
 
 import numpy as np
 import rasterio as rio
-from water.basic_functions import ppaths, tt, time_elapsed, delete_directory_contents, save_pickle, open_pickle
+from water.basic_functions import tt, time_elapsed, delete_directory_contents, save_pickle, open_pickle
+from water.paths import ppaths
 from rasterio.transform import from_bounds
-import matplotlib.pyplot as plt
-
 from multiprocessing import Process
 
 
 def fill_missing_data(data):
     if len(data[np.isnan(data)]) < .5*len(data.flatten()):
-    # if True:
         for ch in range(data.shape[0]):
             if np.any(np.isnan(data[ch])):
                 nan_mean = np.nanmean(data[ch], dtype=np.float32)
                 nan_mean = nan_mean if not np.isnan(nan_mean) else 0
                 data[ch] = np.nan_to_num(data[ch], nan=nan_mean).astype(np.float32)
-        # ch, r, c = np.where(np.isnan(data))
-        # data[ch, r, c] = np.nanmean(data[ch].astype(np.float32), dtype=np.float32)
-    # else:
-    #     print(len(data[np.isnan(data)])/len(data.flatten()))
-    #     for ch in range(data.shape[0]):
-    #         print('  ', len(data[ch][np.isnan(data[ch])])/len(data[ch].flatten()))
     return data
 
 
@@ -61,7 +52,7 @@ def evaluate_model_on_single_image(model_container: ModelTrainingContainer, data
 
 
 def cut_next_file_set(
-        file_paths, country, use_veg_indices, num_proc, country_dir, base_dir_path, eval_grid_width=832
+        file_paths, use_veg_indices, num_proc, country_dir, base_dir_path, eval_grid_width=832
 ):
     delete_directory_contents(country_dir/'elevation_cut')
     delete_directory_contents(country_dir/'sentinel_4326_cut')
@@ -77,7 +68,6 @@ def cut_next_file_set(
     file_list = []
     for ind, file in enumerate(file_paths):
         sentinel_path = country_dir/f'sentinel_4326_cut/{file.name}'
-        # print(file)
         elevation_path = country_dir/f'elevation_cut/{sentinel_path.name}'
 
         data, _, _ = open_all_and_merge(
@@ -94,17 +84,15 @@ def cut_next_file_set(
     else:
         data = np.array([])
     save_pickle(country_dir/f'input_data/next_inputs_files.pkl', file_list)
-    # print(len(file_list))
     np.save(country_dir/f'input_data/next_inputs.npy', data)
 
 
-def evaluate_on_all_sen_data_multi(model_number,
+def predict_on_all_sen_data_multi(model_number,
                                    country,
                                    use_veg_indices=True,
                                    num_per=1,
-                                   save_inputs=False,
                                    output_name='output_data',
-                                   base_dir_path=ppaths.country_data,
+                                   base_dir_path=ppaths.evaluation_data,
                                    country_dir=None,
                                    num_proc=16,
                                    eval_grid_width=832,
@@ -125,11 +113,9 @@ def evaluate_on_all_sen_data_multi(model_number,
                 delete_directory_contents(dir)
         temp_paths = list((country_dir/'temp').glob('*'))
         num_files = len(temp_paths)
-        current_paths = temp_paths[0:num_per]
         cut_next_file_set(
-            file_paths=temp_paths[0:num_per], country=country, country_dir=country_dir,
-            use_veg_indices=use_veg_indices, num_proc=num_proc, base_dir_path=base_dir_path,
-            eval_grid_width=eval_grid_width
+            file_paths=temp_paths[0:num_per], country_dir=country_dir, use_veg_indices=use_veg_indices,
+            num_proc=num_proc, base_dir_path=base_dir_path, eval_grid_width=eval_grid_width
         )
         file_ind = num_per
         current_ind = 0
@@ -137,9 +123,8 @@ def evaluate_on_all_sen_data_multi(model_number,
         while file_ind <= num_files - 1:
             file_paths = temp_paths[file_ind:file_ind+num_per]
             inputs = dict(
-                file_paths=file_paths, country=country, country_dir=country_dir,
-                use_veg_indices=use_veg_indices, num_proc=num_proc, base_dir_path=base_dir_path,
-                eval_grid_width=eval_grid_width
+                file_paths=file_paths, country_dir=country_dir, use_veg_indices=use_veg_indices, num_proc=num_proc,
+                base_dir_path=base_dir_path, eval_grid_width=eval_grid_width
             )
             proc = Process(target=cut_next_file_set, kwargs=inputs)
             proc.start()
@@ -151,7 +136,6 @@ def evaluate_on_all_sen_data_multi(model_number,
             if len(current_paths) > 0:
                 output = evaluate_model_on_single_image(model_container, data)
                 save_model_outputs(output, current_paths, outputs_dir)
-            # current_paths = file_paths
             proc.join()
             proc.close()
             file_ind += num_per

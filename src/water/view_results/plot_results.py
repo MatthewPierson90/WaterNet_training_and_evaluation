@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 from matplotlib.widgets import TextBox, RadioButtons
 import numpy as np
-from water.basic_functions import ppaths
+from water.paths import ppaths
 import torch
 from torch import nn
 from torch.nn import functional as F
@@ -33,12 +33,12 @@ class MyPlot:
         self.model = None
         for batch in batches:
             if self.raw is None:
-                self.raw = np.load(ppaths.waterway/f'model_results/training_batch_{batch}/raw.npy').astype(np.float32)
-                self.model = np.load(ppaths.waterway/f'model_results/training_batch_{batch}/y_model.npy')[:,
+                self.raw = np.load(ppaths.training_data/f'model_results/training_batch_{batch}/raw.npy').astype(np.float32)
+                self.model = np.load(ppaths.training_data/f'model_results/training_batch_{batch}/y_model.npy')[:,
                              model_index].astype(np.float32)
             else:
-                raw = np.load(ppaths.waterway/f'model_results/training_batch_{batch}/raw.npy').astype(np.float32)
-                model = np.load(ppaths.waterway/f'model_results/training_batch_{batch}/y_model.npy')[:,
+                raw = np.load(ppaths.training_data/f'model_results/training_batch_{batch}/raw.npy').astype(np.float32)
+                model = np.load(ppaths.training_data/f'model_results/training_batch_{batch}/y_model.npy')[:,
                              model_index].astype(np.float32)
                 self.raw = np.concatenate([self.raw, raw], axis=0)
                 self.model = np.concatenate([self.model, model], axis=0)
@@ -293,7 +293,7 @@ class MyPlot:
 
 class TrainingLogPlot:
     def __init__(self, epochs=None, model_index=None, test_index=1000000,
-                 plot_test=False, base_path=ppaths.waterway/'model_data', index_div=1
+                 plot_test=False, base_path=ppaths.training_data/'model_data', index_div=1
                  ):
         self.base_path = base_path
         if model_index is None:

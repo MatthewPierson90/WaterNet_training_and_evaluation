@@ -4,11 +4,10 @@ import numpy as np
 import torch
 import rasterio as rio
 from matplotlib.widgets import Button
-from water.basic_functions import ppaths, open_json, save_json
-import rioxarray as rxr
-from water.data_functions.clean.merge_waterway_data import ww_val_to_per
+from water.basic_functions import open_json, save_json
+from water.paths import ppaths
 from water.data_functions.load.load_waterway_data import SenBurnedTrailLoader
-from water.training.evaluate_model import get_input_files
+from water.training.test_model import get_input_files
 import geopandas as gpd
 from pathlib import Path
 import shapely
@@ -24,7 +23,7 @@ def decrease_y(y, num_factors):
 
 
 def open_hu4_parquet_data(index):
-    return gpd.read_parquet(ppaths.waterway/f'hu4_parquet/hu4_{index:04d}.parquet')
+    return gpd.read_parquet(ppaths.training_data/f'hu4_parquet/hu4_{index:04d}.parquet')
 
 
 def make_input_output_files(base_dir: Path, input_files: list[Path], model_number: int):
@@ -40,14 +39,14 @@ def remove_ax_labels(ax):
 class Chooser:
     def __init__(self, model_number, clear_seen=False,
                  eval_files=None, path_pairs=None,
-                 eval_dir=ppaths.waterway/'model_inputs_224',
+                 eval_dir=ppaths.training_data/'model_inputs_224',
                  data_loader: SenBurnedTrailLoader = SenBurnedTrailLoader()
                  ):
         count = 0
         self.data_loader = data_loader
         self.eval_dir = eval_dir
         self.seen_path = eval_dir/f'good_bad_ugly_model_eval.json'
-        self.hu4_hulls = gpd.read_parquet(ppaths.waterway/'hu4_hulls.parquet')
+        self.hu4_hulls = gpd.read_parquet(ppaths.training_data/'hu4_hulls.parquet')
         self.hull_tree = shapely.STRtree(self.hu4_hulls.geometry.to_list())
         self.index_to_hu4_index = {ind: idx for ind, idx in enumerate(self.hu4_hulls.hu4_index)}
         self.current_hu4 = 0
@@ -60,7 +59,7 @@ class Chooser:
             eval_files = get_input_files(eval_dir=eval_dir)
         self.rsl = None
         self.sen_im = None
-        output_dir = ppaths.waterway/f'{eval_dir}/output_data_{model_number}'
+        output_dir = ppaths.training_data/f'{eval_dir}/output_data_{model_number}'
         self.path_pairs = path_pairs
         if path_pairs is None:
             self.path_pairs = make_input_output_files(self.eval_dir, eval_files, model_number)
@@ -334,8 +333,8 @@ if __name__ == '__main__':
     import seaborn as sns
     from water.basic_functions import printdf
 
-    inputs_832 = ppaths.waterway/'model_inputs_832'
-    # inputs_832 = ppaths.waterway/'model_inputs_224'
+    inputs_832 = ppaths.training_data/'model_inputs_832'
+    # inputs_832 = ppaths.training_data/'model_inputs_224'
     new_index = 775
     df_new = open_and_merge_dataframes(get_stat_paths(inputs_832, new_index))
     df_new = df_new.set_index('file_name')
@@ -385,7 +384,7 @@ if __name__ == '__main__':
     # # # #
     # # df_des = df_832[(df_832.drainage == 0) & (df_832.canal_total == 0)]
     # # printdf(df_des[['a_f', 'p_f', 'r_f', 'f1']].describe(.05*i for i in range(1, 20)), 100)
-    # hulls_df = gpd.read_parquet(ppaths.waterway/'hu4_hulls.parquet')
+    # hulls_df = gpd.read_parquet(ppaths.training_data/'hu4_hulls.parquet')
     # hulls_df = hulls_df.reset_index()
     # hulls_all = shapely.unary_union(hulls_df.geometry)
     # df_832['geometry'] = df_832.file_name.apply(name_to_shapely_box)

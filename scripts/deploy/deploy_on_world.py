@@ -1,6 +1,6 @@
 import os
 from pathlib import Path
-from water.make_country_waterways.run_polygon_eval import run_polygon_evaluate
+from water.deployment_functions.deploy_on_polygon import run_polygon_evaluate
 from water.basic_functions import ppaths, delete_directory_contents, tt, time_elapsed
 import geopandas as gpd
 import shapely
@@ -15,10 +15,10 @@ def copy_sentinel_from_storage(
     file_indices = sentinel_tree.query(polygon, 'intersects')
     files_to_copy = sentinel_gdf.loc[file_indices]
     print(f"copying {len(files_to_copy)} files from storage", len(file_indices))
-    temp_dir = ppaths.country_data/'sentinel_temp'
+    temp_dir = ppaths.evaluation_data/'sentinel_temp'
     temp_dir.mkdir(parents=True, exist_ok=True)
     storage_dir = ppaths.storage_data/'sentinel_4326'
-    sentinel_dir = ppaths.country_data/'sentinel_4326'
+    sentinel_dir = ppaths.evaluation_data/'sentinel_4326'
     for file in files_to_copy.file_name:
         if not (sentinel_dir/file).exists():
             os.system(f'cp {storage_dir/file} {temp_dir/file}')
@@ -28,15 +28,15 @@ def remove_current_sentinel_data(
         polygon: shapely.Polygon, sentinel_gdf: gpd.GeoDataFrame, sentinel_tree: shapely.STRtree
 ) -> None:
     files_to_keep = set(sentinel_gdf.loc[sentinel_tree.query(polygon, 'intersects')].file_name)
-    sentinel_dir = ppaths.country_data/'sentinel_4326'
+    sentinel_dir = ppaths.evaluation_data/'sentinel_4326'
     for file in sentinel_dir.iterdir():
         if file.name not in files_to_keep:
             os.remove(file)
 
 
 def move_temp_data_to_sentinel():
-    sentinel_dir = ppaths.country_data/'sentinel_4326'
-    temp_dir = ppaths.country_data/'sentinel_temp'
+    sentinel_dir = ppaths.evaluation_data/'sentinel_4326'
+    temp_dir = ppaths.evaluation_data/'sentinel_temp'
     for file in temp_dir.iterdir():
         file_name = file.name
         new_path = sentinel_dir/file_name
@@ -126,7 +126,7 @@ if __name__ == '__main__':
     polygon_info = polygon_info.sort_values(by=['x_index', 'y_index']).reset_index(drop=True)
     time_elapsed(s)
 
-    save_dir_base = ppaths.country_data/'model_outputs_zoom_level_6/'
+    save_dir_base = ppaths.evaluation_data/'model_outputs_zoom_level_6/'
 
     polygon_info['file_exists'] = polygon_info[['x_index', 'y_index']].apply(
         lambda row: (save_dir_base/f'{row.x_index}_{row.y_index}.tif').exists(), axis=1
@@ -149,7 +149,7 @@ if __name__ == '__main__':
         eval_grid_width=eval_grid_width, eval_grid_step_size=eval_grid_width*3//4,
         model_number=model_num, num_proc=num_proc, num_per=num_per,
         recut_output_data=recut_output, output_grid_width=output_width, output_grid_res=output_grid_res,
-        base_dir_path=ppaths.country_data
+        base_dir_path=ppaths.evaluation_data
     )
     copy_inputs = dict(
         polygon=polygon_info.geometry[0], sentinel_gdf=sentinel_storage_info, sentinel_tree=sentinel_storage_tree

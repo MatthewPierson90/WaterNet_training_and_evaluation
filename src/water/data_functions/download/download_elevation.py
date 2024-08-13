@@ -1,7 +1,8 @@
 import shapely
 
-from water.basic_functions import (ppaths, get_country_bounding_box,
-                                   tt, time_elapsed, bboxtype, my_pool)
+from water.basic_functions import (get_country_bounding_box,
+                                   tt, time_elapsed, bboxtype, SharedMemoryPool)
+from water.paths import ppaths
 import logging
 import pystac_client
 import requests
@@ -54,7 +55,7 @@ def download_and_save_single_file(input_dict):
 
 
 def download_bbox_elevation_data(bbox: bboxtype,
-                                 save_dir: Path = ppaths.country_data/'elevation',
+                                 save_dir: Path = ppaths.evaluation_data/'elevation',
                                  num_proc: int = 2,
                                  force_download: bool = False,
                                  print_progress: bool = True
@@ -79,13 +80,14 @@ def download_bbox_elevation_data(bbox: bboxtype,
                     'start_time': s,
                     'print_progress': print_progress
                     } for item in items]
-    my_pool(
+    SharedMemoryPool(
         num_proc=num_proc, input_list=input_dicts, func=download_and_save_single_file,
         time_out=120, terminate_on_error=False
-    )
+    ).run()
+
 
 def download_bbox_list_elevation_data(bbox_list: list[bboxtype],
-                                 save_dir: Path = ppaths.country_data/'elevation',
+                                 save_dir: Path = ppaths.evaluation_data/'elevation',
                                  num_proc: int = 2,
                                  force_download: bool = False,
                                  print_progress: bool = True
@@ -111,10 +113,10 @@ def download_bbox_list_elevation_data(bbox_list: list[bboxtype],
                     'start_time': s,
                     'print_progress': print_progress
                     } for item in items]
-    my_pool(
+    SharedMemoryPool(
         num_proc=num_proc, input_list=input_dicts, func=download_and_save_single_file,
         time_out=120, terminate_on_error=False
-    )
+    ).run()
 
 def download_country_elevation_data(country: str,
                                     num_proc: int = 4,
@@ -138,7 +140,7 @@ def download_country_elevation_data(country: str,
 
 
 def download_polygon_list_elevation_data(
-        polygon_list: list[shapely.Polygon], num_proc: int = 4, save_dir: Path = ppaths.country_data/'elevation',
+        polygon_list: list[shapely.Polygon], num_proc: int = 4, save_dir: Path = ppaths.evaluation_data/'elevation',
         print_progress: bool = True, force_download: bool = False
 ):
     bbox_list = [tuple(polygon.bounds) for polygon in polygon_list]
@@ -156,50 +158,3 @@ def get_series_polygon_list(series: gpd.GeoSeries):
         else:
             polygon_list.append(polygon)
     return polygon_list
-
-# def get_admin_gdf_from_country_name(country_name: str, admin_level: int):
-#     shapefile_path = ppaths.country_lookup_data/'shapefiles'
-#     alpha_3 = get_alpha_3_code_from_country_name(country_name)
-#     dir_path = shapefile_path/f'gadm41_{alpha_3}_shp'
-#     file_path = dir_path/f'gadm41_{alpha_3}_{admin_level}.shp'
-#     df = gpd.read_file(file_path)
-#     df['name'] = df[f'NAME_{admin_level}']
-#     return df
-
-if __name__ == '__main__':
-
-
-    # country_list = [
-    #     'jammu-kashmir', 'aksai chin', 'arunachal pradesh'
-    # ]
-    gdf = gpd.read_parquet(ppaths.country_lookup_data/'world_boundaries.parquet')
-    already_downloaded = shapely.unary_union(gpd.read_parquet(ppaths.country_data/'elevation/elevation.parquet').geometry)
-    world_geom = shapely.unary_union(gdf.geometry)
-    remaining = world_geom.difference(already_downloaded)
-    poly_list = list(remaining.geoms)
-    print(len(poly_list))
-    # series = gpd.GeoSeries(poly_list)
-    # series.plot()
-    # for country in country_list:
-    #     poly_list.append(gdf[gdf.name.str.lower() == country].reset_index(drop=True).geometry[0])
-    download_polygon_list_elevation_data(poly_list)
-
-
-    #
-    #
-    # gdf = get_admin_gdf_from_country_name('united_states_of_america', admin_level=1)
-    # gdf = gdf[gdf.NAME_1.isin(['Hawaii'])]
-    # print(gdf)
-    # poly_list = get_series_polygon_list(gdf.geometry)
-    # print(len(poly_list))
-    # download_polygon_list_elevation_data(poly_list)
-    #
-    # download_bbox_elevation_data(
-    #     bbox = [-175, 51, -120, 74], save_dir=ppaths.country_data/'elevation', num_proc=4,
-    # )
-
-    # country_list = ['Greenland']
-    #
-    # for country in country_list:
-    #     print(country)
-    #     download_country_elevation_data(country, num_proc=8)

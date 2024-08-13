@@ -1,8 +1,9 @@
 import shapely
 
-from water.make_country_waterways.make_country_grids import make_grids
-from water.make_country_waterways.cut_data import cut_data_to_match
-from water.basic_functions import get_country_bounding_box, ppaths, Path, delete_directory_contents
+from water.deployment_functions.reference_grids import make_grids
+from water.deployment_functions.cut_data import cut_data_to_match
+from pathlib import Path
+
 
 def prepare_main(save_dir: Path, polygon: shapely.Polygon, grid_width: int = 1280, grid_res: int=10, step_size: int = None,
                  **kwargs):

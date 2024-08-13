@@ -1,7 +1,4 @@
 import numpy as np
-import os
-
-
 
 
 class TrainingInfoPrinter:
@@ -63,7 +60,9 @@ class TrainingInfoPrinter:
         column_width = self.column_width
         header = '|'
         for name in column_names:
-            header += int(np.ceil((column_width-len(name))/2))*' ' + name + int(np.floor((column_width-len(name))/2))*' '+'|'
+            spaces_1 = int(np.ceil((column_width-len(name))/2))*' '
+            spaces_2 = int(np.floor((column_width-len(name))/2))*' '
+            header += spaces_1 + name + spaces_2 + '|'
         return header
     
     def make_dynamic_header(self, max_data_index, data_index, len_data, i):
@@ -73,8 +72,6 @@ class TrainingInfoPrinter:
               4:len_data}
         dynm = f'[{pd[1]}/{pd[2]}][{pd[3]}/{pd[4]}]'
         dynm_len = len(dynm)
-        
-        # print(dynm_len, self.string_len, dynm_len-self.string_len+9)
         first = ' '*(5-max(int(np.floor((dynm_len-self.string_len+9)/2)),0))
         last = ' '*(5-max(int(np.ceil((dynm_len-self.string_len+9)/2)),0))
         

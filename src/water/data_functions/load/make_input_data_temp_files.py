@@ -11,7 +11,7 @@ from water.basic_functions import ppaths, get_country_polygon, delete_directory_
 
 
 def make_grid(grid_width, min_lon, max_lon, min_lat, max_lat, country, save_dir_name):
-    save_dir = ppaths.waterway/f'country_data/{country}/{save_dir_name}'
+    save_dir = ppaths.training_data/f'country_data/{country}/{save_dir_name}'
     file_name = f'bbox_{min_lon:.10f}_{min_lat:.10f}_{max_lon:.10f}_{max_lat:.10f}.tif'
     save_path = save_dir/file_name
     trans = transform.from_bounds(min_lon, min_lat, max_lon, max_lat, grid_width, grid_width)
@@ -52,7 +52,7 @@ def make_grids_for_fixed_lats(min_lat, max_lat, west, east, x_res, grid_width,
 
 
 def make_grids(country, bbox, grid_width=2560, step_size=1280, save_dir_name='temp', grid_res=10):
-    country_dir = ppaths.waterway/f'country_data/{country}'
+    country_dir = ppaths.training_data/f'country_data/{country}'
     save_dir = country_dir/f'{save_dir_name}'
     if not save_dir.exists():
         save_dir.mkdir()

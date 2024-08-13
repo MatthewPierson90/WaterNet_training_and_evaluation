@@ -1,10 +1,5 @@
-import warnings
-
 import rasterio as rio
 import numpy as np
-from water.basic_functions import ppaths
-import matplotlib.pyplot as plt
-
 
 def make_slope(el_data):
     el_data = el_data[0]
@@ -72,15 +67,11 @@ def open_all_and_merge(sentinel_path,
                        make_indices=False,
                        fill_missing=False,
                        shape=(1, 832, 832)):
-    sen_exists = sentinel_path.exists()
-    elevation_exists = elevation_path.exists()
     make_placeholder_sentinel_data = False
     make_placeholder_elevation_data = False
     if not sentinel_path.exists():
-        # print(f'sentinel path exists: {sentinel_path.exists()}\n\t{sentinel_path}')
         make_placeholder_sentinel_data = True
     if not elevation_path.exists():
-        # print(f'elevation path exists: {elevation_path.exists()}\n\t{elevation_path}')
         make_placeholder_elevation_data = True
     if not make_placeholder_sentinel_data:
         sen_data, sen_missing = open_single_sen_image(sentinel_path, make_indices=make_indices)
@@ -103,11 +94,3 @@ def open_all_and_merge(sentinel_path,
     return data, sen_missing, el_missing
 
 
-if __name__ == '__main__':
-    cnt = 'rwanda'
-    files = (ppaths.waterway/f'country_data/{cnt}/sentinel_4326_cut').glob('*')
-    files = list(files)
-    file = files[1]
-    d, m1, m2 = open_all_and_merge(file, cnt)
-    # fig, ax = plt.subplots()
-    # ax.imshow(m2)

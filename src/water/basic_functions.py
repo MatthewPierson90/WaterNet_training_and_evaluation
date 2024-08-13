@@ -27,7 +27,7 @@ import py7zr
 import os
 from multiprocessing import Process
 import psutil
-
+from water.paths import ppaths
 
 Iterable = Iterable
 Callable = Callable
@@ -52,67 +52,6 @@ def open_yaml(file_name: pathlike):
     with open(f'{file_name}', 'r') as file:
         obj = yaml.safe_load(file)
     return obj
-
-
-package_path = Path(__file__).parent
-src_path = package_path.parent
-# base_path = bridges_package_path.parent
-if (src_path.parent/'data').exists():
-    base_path = src_path.parent
-elif (Path(sys.path[0])/'data').exists():
-    base_path = Path(sys.path[0])
-elif (Path(sys.path[0]).parent/'data').exists():
-    base_path = Path(sys.path[0]).parent
-elif (Path(os.getcwd())/'data').exists():
-    base_path = Path(os.getcwd())
-elif (Path(os.getcwd()).parent/'data').exists():
-    base_path = Path(os.getcwd()).parent
-elif (Path(os.getcwd()).parent.parent/'data').exists():
-    base_path = Path(os.getcwd()).parent.parent
-else:
-    raise Exception('Can\'t find data directory... '
-                    'A directory named "data" must exist'
-                    'in the same directory as this script '
-                    'or in this script\'s parent directory'
-                    f'Checked:'
-                    f'{os.getcwd()}'
-                    f'{sys.path[0]}'
-                    )
-
-
-class Proj_paths:
-    """
-    paths for the project
-    """
-    
-    def __init__(self,
-                 base: Path = base_path
-                 ) -> None:
-        self.base_path = base
-        self.configuration_files = self.base_path/'configuration_files'
-        self._path_config = {}
-        if (self.configuration_files/'path_configuration.yaml').exists():
-            self._path_config = open_yaml(self.configuration_files/'path_configuration.yaml')
-            if self._path_config is None:
-                self._path_config = {}
-        self.data = base/'data'
-        self.waterway = self.add_directory('waterway_data', self.data)
-        self.country_lookup_data = self.add_directory('country_lookup_data', self.data)
-        self.country_data = self.add_directory('country_data', self.waterway)
-        self.storage_data = self.add_directory('waterway_storage', self.waterway)
-    
-    def add_directory(self, directory_name: str, directory_parent: Path):
-        if directory_name not in self._path_config:
-            directory_path = directory_parent/directory_name
-        else:
-            directory_path = Path(self._path_config[directory_name])
-        if not directory_path.exists() and not directory_path.is_symlink():
-            directory_path.mkdir()
-        return directory_path
-
-
-ppaths = Proj_paths()
-
 
 class CountryCodeException(Exception):
     @staticmethod
@@ -266,7 +205,7 @@ def get_country_polygon(country, only_mainland=False):
 
 def get_country_bridges(country):
     country_polygon = get_country_polygon(country)
-    bridges = gpd.read_parquet(ppaths.country_data/'bridge_locations.parquet')
+    bridges = gpd.read_parquet(ppaths.evaluation_data/'bridge_locations.parquet')
     bridges = bridges[bridges.intersects(country_polygon)].reset_index(drop=True)
     return bridges
 
@@ -309,12 +248,13 @@ def get_country_bounding_box(country_name: str=None,
 
 
 def check_hu4_exists(hu4_index: int):
-    return (ppaths.waterway/f'hu4_hull/hu4_{hu4_index:04d}.parquet').exists()
+    return (ppaths.training_data/f'hu4_hull/hu4_{hu4_index:04d}.parquet').exists()
 
 
 def get_hu4_hull_gdf(hu4_index: int):
-    gdf = gpd.read_parquet(ppaths.waterway/f'hu4_hull/hu4_{hu4_index:04d}.parquet')
+    gdf = gpd.read_parquet(ppaths.training_data/f'hu4_hull/hu4_{hu4_index:04d}.parquet')
     return gdf
+
 
 def get_hu4_hull_polygon(hu4_index: int):
     gdf = get_hu4_hull_gdf(hu4_index).reset_index(drop=True)
@@ -322,8 +262,9 @@ def get_hu4_hull_polygon(hu4_index: int):
     return polygon
 
 def get_hu4_gdf(hu4_index: int):
-    gdf = gpd.read_parquet(ppaths.waterway/f'hu4_parquet/hu4_{hu4_index:04d}.parquet')
+    gdf = gpd.read_parquet(ppaths.training_data/f'hu4_parquet/hu4_{hu4_index:04d}.parquet')
     return gdf
+
 
 def file_name_to_bbox(file_name: str, buffer: float) -> list:
     bbox = file_name.split('.tif')[0].split('_')[1:]
@@ -334,6 +275,7 @@ def file_name_to_bbox(file_name: str, buffer: float) -> list:
 def name_to_box(file_name: str, buffer: float = 0.) -> shapely.box:
     bbox = file_name_to_bbox(file_name, buffer=buffer)
     return shapely.box(*bbox)
+
 
 def save_json(file_name: pathlike,
               obj
@@ -362,13 +304,13 @@ def open_yaml(file_name: pathlike):
 
 
 def get_test_file_names():
-    with open(ppaths.waterway/'test_file_list.txt') as f:
+    with open(ppaths.training_data/'test_file_list.txt') as f:
         files = f.read().split('\n')[:-1]
     return files
 
 
 def get_val_file_names():
-    with open(ppaths.waterway/'val_file_list.txt') as f:
+    with open(ppaths.training_data/'val_file_list.txt') as f:
         files = f.read().split('\n')[:-1]
     return files
 
@@ -413,6 +355,7 @@ def resuffix_directory_and_make_new(directory_path: Path):
     directory_path.rename(new_path)
     directory_path.mkdir()
 
+
 def resuffix_file(file_path: Path):
     """
     Adds a suffix to the entered directory, then makes an empty directory with that name.
@@ -435,6 +378,7 @@ def resuffix_file(file_path: Path):
         new_path = parent_dir/f'{file_name}_{suffix}{file_type}'
     file_path.rename(new_path)
     return new_path
+
 
 def save_pickle(file_name: pathlike,
                 obj
@@ -555,6 +499,7 @@ def printdf(df: dflike,
             print(df[cols].iloc[start_index:].head(head).to_string())
         else:
             print(df[cols].iloc[start_index:].tail(head).to_string())
+
 
 def get_bbox_x_meter_resolution(resolution_in_meters,
                                 x_min=None,
@@ -694,7 +639,7 @@ def row_col_bbox_to_xy_bbox(rc_bbox, x_min, y_max, x_resolution, y_resolution):
     return bbox_x_min, bbox_y_min, bbox_x_max, bbox_y_max
 
 def make_elevation_file_array_and_file_paths(
-        elevation_dir: Path = ppaths.country_data/'elevation'
+        elevation_dir: Path = ppaths.evaluation_data/'elevation'
 ) -> ('np.array', list):
     elevations_files = list(elevation_dir.glob('*.tif'))
     elevation_array = np.zeros((len(elevations_files), 4))
@@ -731,7 +676,7 @@ def get_elevation_from_file(coordinate_array: 'np.array',
 
 
 def coordinate_elevation_lookup(coordinate_list: list,
-                                elevation_dir: Path = ppaths.country_data/'elevation',
+                                elevation_dir: Path = ppaths.evaluation_data/'elevation',
                                 ) -> 'np.array':
     coordinate_array = np.array(coordinate_list)
     to_return = np.zeros(len(coordinate_list))
@@ -897,121 +842,165 @@ def multi_download(url_list: list,
                     'extract_zip_files': extract_zip_files,
                     'delete_zip_files_after_extraction': delete_zip_files_after_extraction,
                     } for url, save_path in zip(url_list, save_path_list)]
-    my_pool(num_proc=num_proc, input_list=input_dicts, func=single_download, time_out=3600, use_kwargs=True)
+    SharedMemoryPool(
+        num_proc=num_proc, input_list=input_dicts, func=single_download, time_out=3600, use_kwargs=True
+    ).run()
 
 
-def add_new_process(func, inputs, process_dict, use_kwargs, name=None):
-    # print(inputs)
-    if use_kwargs:
-        p = Process(target=func, kwargs=inputs, name=name)
-    else:
-        p = Process(target=func, args=(inputs, ), name=name)
-    p.start()
-    # process_dict[p.pid] = (p, tt(), inputs)
-    process_dict[p.pid] = {
-        'process': p, 'start_time': tt(), 'inputs': inputs, 'cpu_time': 0, 'cpu_time_delta': 0
-    }
-    return process_dict
+class SharedMemoryPool:
+    def __init__(
+            self, func, input_list: list, num_proc: int,
+            time_out: float = None,
+            sleep_time: float = .1,
+            terminate_on_error: bool = False,
+            max_memory_usage_percent: float = 75.,
+            terminate_memory_usage_percent: float = 90.,
+            time_delta_margin: float = 1.,
+            use_kwargs: bool = False,
+            print_progress: bool = False,
+            name: str = None
+    ):
+        self.func = func
+        self.input_list = input_list
+        max_proc = os.cpu_count()
+        self.time_out = time_out if time_out is not None else np.inf
+        if num_proc > max_proc - 1:
+            num_proc = max_proc - 1
+        elif num_proc <= 0:
+            num_proc = min(max(max_proc + num_proc - 1, 1), max_proc - 1)
+        self.num_proc = num_proc
+        self.current_input_index = 0
+        self.process_dict = {}
+        self.sleep_time = sleep_time
+        self.terminate_on_error = terminate_on_error
+        self.max_memory_usage_percent = max_memory_usage_percent
+        self.terminate_memory_usage_percent = terminate_memory_usage_percent
+        self.time_delta_margin = time_delta_margin
+        self.use_kwargs = use_kwargs
+        self.to_print_progress = print_progress
+        self.name = name
+        self.current_input_index = 0
+        self.num_completed = 0
+        self.num_new_completed = 0
+        self.previous_completed = 0
+        self.start_time = tt()
+        self.num_to_complete = len(self.input_list)
 
+    def has_memory_issues(self):
+        current_memory_usage_percent = psutil.virtual_memory().percent
+        return current_memory_usage_percent >= self.max_memory_usage_percent
 
-def terminate_all(process_dict):
-    for process_info in process_dict.values():
-        p = process_info['process']
+    def has_available_processors(self):
+        return len(self.process_dict) < self.num_proc
+
+    def has_more_inputs(self):
+        return self.current_input_index < len(self.input_list)
+
+    def get_name(self, current_input_index):
+        return f'{self.name}_{current_input_index}' if self.name is not None else None
+
+    def add_new_process(self):
+        # print(inputs)
+        inputs = self.input_list[self.current_input_index]
+        if self.use_kwargs:
+            p = Process(target=self.func, kwargs=inputs, name=self.name)
+        else:
+            p = Process(target=self.func, args=(inputs,), name=self.name)
+        p.start()
+        self.process_dict[p.pid] = {
+            'process': p, 'start_time': tt(), 'inputs': inputs, 'cpu_time': 0, 'cpu_time_delta': 0,
+            'init_start_time': tt()
+        }
+        self.current_input_index += 1
+
+    def fix_memory_usage(self):
+        while psutil.virtual_memory().percent > self.terminate_memory_usage_percent:
+            pid_to_terminate = list(self.process_dict.keys())[-1]
+            newest_start_time = np.inf
+            for pid, process_dict in self.process_dict.items():
+                if process_dict['init_start_time'] < newest_start_time:
+                    pid_to_terminate = pid
+                    newest_start_time = process_dict['init_start_time']
+            self.terminate_and_restart(pid_to_terminate)
+
+    def check_for_completed_processes_and_timeouts(self):
+        self.num_new_completed = 0
+        pids = list(self.process_dict)
+        for pid in pids:
+            process_info_dict = self.process_dict[pid]
+            p = process_info_dict['process']
+            new_time = cpu_time = process_info_dict['cpu_time']
+            start_time = process_info_dict['start_time']
+            time_delta = 0
+            if not p.is_alive():
+                self.remove_process(pid)
+                self.num_completed += 1
+                self.num_new_completed += 1
+            else:
+                new_time = sum(psutil.Process(pid).cpu_times())
+                time_delta = new_time - cpu_time
+            if time_delta > self.time_delta_margin:
+                process_info_dict['cpu_time'] = new_time
+                process_info_dict['start_time'] = tt()
+            else:
+                if tt() - start_time > self.time_out:
+                    print(f'{pid} timed out')
+                    self.terminate_and_restart(pid)
+
+    def terminate_and_restart(self, pid):
+        process_info_dict = self.process_dict[pid]
+        p = process_info_dict['process']
         p.terminate()
-        p.join()
-        p.close()
-    raise Exception('One of the processes failed')
+        inputs = process_info_dict['inputs']
+        self.input_list.append(inputs)
+        self.remove_process(pid)
 
+    def terminate_all(self):
+        for process_info_dict in self.process_dict.values():
+            q = process_info_dict['process']
+            q.terminate()
+            q.join()
+            q.close()
+        raise Exception('One of the processes failed')
 
-def remove_process(completed_pids, process_dict, terminate_on_error):
-    for pid in completed_pids:
+    def remove_process(self, pid):
         try:
-            p = process_dict[pid]['process']
+            p = self.process_dict[pid]['process']
             p.join()
             exitcode = p.exitcode
             p.close()
-            process_dict.pop(pid)
-            if exitcode == 1 and terminate_on_error:
-                terminate_all(process_dict)
+            self.process_dict.pop(pid)
+            if exitcode == 1 and self.terminate_on_error:
+                self.terminate_all()
+        except KeyError:
+            print(pid, self.process_dict.keys())
+
+    def print_progress(self):
+        if self.num_new_completed > 0:
+            if self.to_print_progress:
+                percent_completed = self.num_completed/self.num_to_complete
+                ten_percent = (int(100*percent_completed)//10)*10
+                if ten_percent > self.previous_completed:
+                    print(
+                        f'Completed {percent_completed:.2%} ({self.num_completed}/{self.num_to_complete})'
+                    )
+                    time_elapsed(self.start_time, 2)
+                    self.previous_completed = ten_percent
+
+    def run(self):
+        try:
+            while True:
+                while self.has_available_processors() and self.has_more_inputs() and not self.has_memory_issues():
+                    self.add_new_process()
+                self.check_for_completed_processes_and_timeouts()
+                self.fix_memory_usage()
+                self.print_progress()
+                if len(self.process_dict) == 0 and self.current_input_index >= len(self.input_list):
+                    break
+                if len(self.process_dict) == self.num_proc or self.has_memory_issues():
+                    sleep(self.sleep_time)
         except:
-            print(pid, process_dict.keys())
-    return process_dict
-
-
-def check_for_completed_processes(process_dict: dict, time_out: float, input_list: list, time_delta_margin: float = 1):
-    to_return = []
-    num_timed_out = 0
-    for pid, process_dict in process_dict.items():
-        p = process_dict['process']
-        new_time = cpu_time = process_dict['cpu_time']
-        start_time = process_dict['start_time']
-        time_delta = 0
-        if not p.is_alive():
-            to_return.append(pid)
-        else:
-            new_time = sum(psutil.Process(pid).cpu_times())
-            time_delta = new_time - cpu_time
-        if time_delta > time_delta_margin:
-            process_dict['cpu_time'] = new_time
-            process_dict['start_time'] = tt()
-        else:
-            if tt() - start_time > time_out:
-                print(f'{pid} timed out')
-                inputs = process_dict['inputs']
-                p.terminate()
-                to_return.append(pid)
-                input_list.append(inputs)
-                num_timed_out += 1
-    return to_return, input_list, num_timed_out
-
-
-def my_pool(num_proc, func,
-            input_list,
-            use_kwargs=False,
-            time_out=None, sleep_time=.1,
-            terminate_on_error=False,
-            print_progress=True,
-            name=None):
-    max_proc = os.cpu_count()
-    if time_out is None:
-        time_out = np.inf
-    if num_proc > max_proc:
-        num_proc = max_proc
-    elif num_proc <= 0:
-        num_proc = max_proc + num_proc
-    current_input_index = 0
-    process_dict = {}
-    num_completed = 0
-    num_to_complete = len(input_list)
-    last_printed = -1
-    percentile = max(num_to_complete//100, 1)
-    s = tt()
-    while True:
-        while len(process_dict) < num_proc and current_input_index < len(input_list):
-            process_dict = add_new_process(
-                func=func, inputs=input_list[current_input_index], process_dict=process_dict, use_kwargs=use_kwargs,
-                name=f'{name}_{current_input_index}' if name is not None else None
-            )
-            current_input_index += 1
-        completed_pids, input_list, num_timed_out = check_for_completed_processes(process_dict,
-                                                                                  time_out,
-                                                                                  input_list)
-        num_completed += len(completed_pids) - num_timed_out
-        if print_progress:
-            if num_completed//percentile > last_printed:
-                last_printed = num_completed//percentile
-                if num_to_complete == 0:
-                    num_to_complete = 1
-                percent = num_completed/num_to_complete
-                print(f'Completed {percent:.2%} ({num_completed}/{num_to_complete})')
-                time_elapsed(s, 2)
-        process_dict = remove_process(completed_pids=completed_pids, process_dict=process_dict,
-                                      terminate_on_error=terminate_on_error)
-        if len(process_dict) == 0 and current_input_index >= len(input_list):
-            break
-        if len(process_dict) == num_proc:
-            if sleep_time > 0:
-                sleep(sleep_time)
+            self.terminate_all()
 
 
 def make_directory_gdf(dir_path: Path, use_name: bool = True):
@@ -1046,22 +1035,3 @@ def make_directory_gdf(dir_path: Path, use_name: bool = True):
             os.remove(parquet_path)
             dir_gdf = make_directory_gdf(dir_path, use_name)
     return dir_gdf
-
-
-
-if __name__ == '__main__':
-    gdf = make_directory_gdf(ppaths.country_data/'model_outputs_zoom_level_6', use_name=False)
-    # gdf = make_directory_gdf(ppaths.country_data/'elevation', use_name=True)
-
-    # gdf.to_parquet(ppaths.waterway/'storage_sentinel_4326.parquet')
-#     s=tt()
-#     func = lambda x: sum([1/n**2 for n in range(1, x)])
-#     inputs = 1000000
-#     p = Process(target=func, args=(inputs,))
-#     p.start()
-#     p.terminate()
-#     print(p.exitcode)
-#     p.join()
-#     print(p.exitcode)
-#     p.close()
-#     time_elapsed(s)

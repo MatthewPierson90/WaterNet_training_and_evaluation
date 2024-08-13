@@ -1,8 +1,8 @@
 import rasterio as rio
-import rioxarray as rxr
 import numpy as np
 from pathlib import Path
-from water.basic_functions import ppaths, delete_directory_contents, my_pool
+from water.basic_functions import delete_directory_contents, SharedMemoryPool
+
 from functools import partial
 
 
@@ -58,18 +58,5 @@ def add_weight_to_all_outputs(output_parent_dir, num_proc, output_name='output_d
         'file_list': output_files[i*step_size: (i+1)*step_size],
         'weighted_dir': weighted_dir
     } for i in range(2*num_proc)]
-    my_pool(num_proc=num_proc, func=add_weight_to_file_list, input_list=inputs, use_kwargs=True)
+    SharedMemoryPool(num_proc=num_proc, func=add_weight_to_file_list, input_list=inputs, use_kwargs=True).run()
 
-
-
-if __name__ == '__main__':
-    import matplotlib
-    matplotlib.use('TkAgg')
-    from matplotlib import pyplot as plt
-
-    ctry = 'rwanda'
-    add_weight_to_all_outputs(ctry, num_proc=20)
-    # ctry_path = ppaths.country_data/ctry
-    # output_paths = list((ctry_path/'output_data').iterdir())
-    # weights = add_weight_to_raster(output_paths[0], None)
-    # plt.imshow(weights)

@@ -1,4 +1,4 @@
-from water.basic_functions import ppaths, Path, my_pool, delete_directory_contents, printdf
+from water.basic_functions import ppaths, Path, SharedMemoryPool, delete_directory_contents, printdf
 import rasterio as rio
 import numpy as np
 import pandas as pd
@@ -39,7 +39,7 @@ def make_file_list_dataframe(
 
 
 def get_index_dir_paths(index: int):
-    base_dir = ppaths.waterway/f'model_inputs_{index}/input_data'
+    base_dir = ppaths.training_data/f'model_inputs_{index}/input_data'
     file_paths = list(base_dir.iterdir())
     return file_paths
 
@@ -59,7 +59,7 @@ def make_file_dataframe_multi(
     if save_name is None:
         save_name = f'{file_type.split(".tif")[0]}_data_types.parquet'
     dir_paths = get_index_dir_paths(index)
-    base_dir = ppaths.waterway/f'model_inputs_{index}'
+    base_dir = ppaths.training_data/f'model_inputs_{index}'
     temp_dir = base_dir/'temp_dataframes'
     if not temp_dir.exists():
         temp_dir.mkdir()
@@ -71,7 +71,7 @@ def make_file_dataframe_multi(
             'col_name_dict': col_name_dict,
             'save_path': temp_dir/f'temp_df_{i}.parquet'
         } for i in range(60*num_proc)]
-        my_pool(num_proc=num_proc, input_list=input_list, func=make_file_list_dataframe, use_kwargs=True)
+        SharedMemoryPool(num_proc=num_proc, input_list=input_list, func=make_file_list_dataframe, use_kwargs=True).run()
         df = concatenate_temp_dfs(temp_dir)
         df.to_parquet(base_dir/save_name)
         delete_directory_contents(temp_dir)
@@ -114,7 +114,7 @@ def name_to_shapely_box(file_name):
 
 
 def add_hu4_index(df):
-    hulls_df = gpd.read_parquet(ppaths.waterway/'hu4_hulls.parquet')
+    hulls_df = gpd.read_parquet(ppaths.training_data/'hu4_hulls.parquet')
     df['geometry'] = df.file_name.apply(name_to_shapely_box)
     df = gpd.GeoDataFrame(df, crs=4326).reset_index(drop=True)
     df = df.reset_index()
@@ -133,7 +133,7 @@ if __name__ == '__main__':
     #     index=832, file_type='waterways_burned.tif', col_name_dict=waterways_burned_col_names, num_proc=24
     # )
     pd.options.display.float_format = '{:.6f}'.format
-    df = pd.read_parquet(ppaths.waterway/f'model_inputs_{index}/waterways_burned_data_types.parquet')
+    df = pd.read_parquet(ppaths.training_data/f'model_inputs_{index}/waterways_burned_data_types.parquet')
     for col in df.columns:
         if col != 'file_name':
             df[col] = df[col]/index**2
@@ -183,5 +183,5 @@ if __name__ == '__main__':
     #     print(value, len(df1[df1[value] > 0]), len(df1[df1[value]>0]) / len(df[df[value]>0]), len(df2[df2[value] > 0]), len(df2[df2[value] > 0])/len(df[df[value]>0]))
     # print(df)
     # printdf(df)
-    df1.to_parquet(ppaths.waterway/f'model_inputs_{index}/new_inputs.parquet')
+    df1.to_parquet(ppaths.training_data/f'model_inputs_{index}/new_inputs.parquet')
     # print(df.sum())

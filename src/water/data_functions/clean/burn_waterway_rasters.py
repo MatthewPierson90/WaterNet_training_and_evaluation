@@ -1,24 +1,24 @@
 import rasterio as rio
 from rasterio import features
-import rioxarray as rxr
 import geopandas as gpd
 import shapely
 import numpy as np
-from water.basic_functions import ppaths, printdf, tt, time_elapsed, my_pool, get_test_file_names, get_val_file_names
-
+from water.basic_functions import SharedMemoryPool
+from water.paths import ppaths
 
 
 def open_hu4_data(index:int,
                   only_linestrings=False):
-    waterway_path = ppaths.waterway/f'hu4_parquet/hu4_{index:04d}.parquet'
+    waterway_path = ppaths.training_data/f'hu4_parquet/hu4_{index:04d}.parquet'
     if waterway_path.exists():
         gdf = gpd.read_parquet(waterway_path)
         if only_linestrings:
             gdf = gdf[gdf.type.isin(['LineString', 'MultiLineString'])].reset_index(drop=True)
-            gdf = gdf[gdf.fcode_description.str.contains('Stream') | gdf.fcode_description.str.contains('Artificial')].reset_index(drop=True)
+            gdf = gdf[
+                gdf.fcode_description.str.contains('Stream') | gdf.fcode_description.str.contains('Artificial')
+            ].reset_index(drop=True)
         if len(gdf)>0:
             return gdf
-
 
 
 def get_waterways_in_bbox(bbox,
@@ -29,7 +29,6 @@ def get_waterways_in_bbox(bbox,
     water_in_box = waterways.loc[intersects_box_list].reset_index(drop=True)
     water_in_box['geometry'] = shapely.intersection(box, water_in_box.geometry)
     return water_in_box
-
 
 
 def find_intersection_points(water_gdf: gpd.GeoDataFrame):
@@ -46,16 +45,6 @@ def find_intersection_points(water_gdf: gpd.GeoDataFrame):
     line_inds, points_inds = points_tree.query(line_strings, predicate='intersects')
     unique_inds, inds_counts = np.unique(points_inds, return_counts=True)
     return all_points[unique_inds[np.where(inds_counts > 2)]]
-
-
-# if __name__ == '__main__':
-#     wgdf = gpd.read_parquet(ppaths.waterway/'hu4_parquet/hu4_0102.parquet')
-#     s = tt()
-#     intersection_points = find_intersection_points(wgdf)
-#     print(intersection_points)
-#     time_elapsed(s, 2)
-#     ax = wgdf.plot()
-#     gpd.GeoSeries(intersection_points, crs=4269).plot(ax=ax, color='red')
 
 
 def burn_to_raster_loop(water_gdf: gpd.GeoDataFrame, out_shape, transform, init_buffer=.0005):
@@ -79,8 +68,6 @@ def burn_to_raster_loop(water_gdf: gpd.GeoDataFrame, out_shape, transform, init_
     return image
 
 
-
-
 def burn_waterway_raster(raster_path,
                          water_in_box: gpd.GeoDataFrame,
                          dst_profile,
@@ -95,7 +82,7 @@ def burn_waterway_raster(raster_path,
     dst_profile['count'] = 1
     dst_profile['dtype'] = np.uint8
     dst_profile['nodata'] = None
-    burned_dir = ppaths.waterway/save_dir_name
+    burned_dir = ppaths.training_data/save_dir_name
     if not burned_dir.exists():
         burned_dir.mkdir()
     save_dir = burned_dir
@@ -113,7 +100,6 @@ def burn_waterway_raster(raster_path,
     return image
 
 
-
 def set_water_type(fcode_description: str,
                    types: list[tuple[str, int]] = (('Ephemeral', 1), ('Intermittent', 2))
                    ) -> int:
@@ -126,14 +112,15 @@ def set_water_type(fcode_description: str,
             return val
     return max_val + 1
 
-bad_types = (
+
+ignored_types = (
     'Ice Mass', 'Bridge', 'Tunnel', 'Underground Conduit', 'Submerged Stream', 'Levee', 'Nonearthen Shore', 'Rapids',
     'Dam/Weir', 'Gate', 'Pipeline'
 )
 
 
 def get_hu4_waterways(hu4_index: int,
-                      types_to_remove: iter = bad_types,
+                      types_to_remove: iter = ignored_types,
                       types_to_differentiate: list[tuple[str, int]] = (
                               ('Playa', 1),
                               ('Inundation', 2),
@@ -173,7 +160,6 @@ def make_bbox(file_name):
     return bbox
 
 
-
 def do_files(files: list,
              water: gpd.GeoDataFrame,
              ww_shape: shapely.Polygon,
@@ -194,9 +180,10 @@ def do_files(files: list,
                     dst_profile=dst_profile, out_shape=out_shape, transform=transform
             )
 
+
 def do_all_for_ind(ww_ind, num_proc, files):
-    hu4_file = ppaths.waterway/f'hu4_parquet/hu4_{ww_ind:04d}.parquet'
-    hull_file = ppaths.waterway/f'hu4_hull/hu4_{ww_ind:04d}.parquet'
+    hu4_file = ppaths.training_data/f'hu4_parquet/hu4_{ww_ind:04d}.parquet'
+    hull_file = ppaths.training_data/f'hu4_hull/hu4_{ww_ind:04d}.parquet'
     if hu4_file.exists() and hull_file.exists():
         print(f'Working on {ww_ind}')
         water = get_hu4_waterways(ww_ind)
@@ -213,21 +200,18 @@ def do_all_for_ind(ww_ind, num_proc, files):
              'water': water, 'ww_shape': ww_shape,
              } for i in range(num_steps)
         ]
-        my_pool(
+        SharedMemoryPool(
             num_proc=num_proc, func=do_files, input_list=input_list, use_kwargs=True, sleep_time=0
-        )
-
-# if __name__ == '__main__':
-#     do_all_for_ind(101, 5)
+        ).run()
 
 
 def do_multiple_inds(inds_to_do, num_proc, init_dir='sentinel', exclude_test_val=True):
-    if not (ppaths.waterway/'waterways_burned').exists():
-        (ppaths.waterway/'waterways_burned').mkdir()
-    # files = list((ppaths.waterway / init_dir).glob('*'))
+    if not (ppaths.training_data/'waterways_burned').exists():
+        (ppaths.training_data/'waterways_burned').mkdir()
+    # files = list((ppaths.training_data / init_dir).glob('*'))
     files = [
-        file for file in (ppaths.waterway/init_dir).iterdir()
-        if not (ppaths.waterway/f'waterways_burned/{file.name}').exists()
+        file for file in (ppaths.training_data/init_dir).iterdir()
+        if not (ppaths.training_data/f'waterways_burned/{file.name}').exists()
     ]
     print(len(files))
     # print(len(files))
@@ -247,8 +231,8 @@ if __name__ == '__main__':
     from pprint import pprint
     # water_types = set()
     # for ww_ind in range(101, 1900):
-        # hu4_file = ppaths.waterway / f'hu4_parquet/hu4_{ww_ind:04d}.parquet'
-    #     hull_file = ppaths.waterway / f'hu4_hull/hu4_{ww_ind:04d}.parquet'
+        # hu4_file = ppaths.training_data / f'hu4_parquet/hu4_{ww_ind:04d}.parquet'
+    #     hull_file = ppaths.training_data / f'hu4_hull/hu4_{ww_ind:04d}.parquet'
     #     if hu4_file.exists() and hull_file.exists():
     #         print(f'opening ww ind {ww_ind}')
     #         water = get_hu4_waterways(ww_ind)

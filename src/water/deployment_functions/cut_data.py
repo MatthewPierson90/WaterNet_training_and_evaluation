@@ -1,10 +1,9 @@
 import rasterio as rio
 from rasterio.warp import Resampling
-import xarray as xr
 import rioxarray as rxr
-from rioxarray.merge import merge_arrays, merge_datasets
+from rioxarray.merge import merge_arrays
 import shapely
-from water.basic_functions import (my_pool, Path, make_directory_gdf, name_to_box, delete_directory_contents)
+from water.basic_functions import SharedMemoryPool, Path, make_directory_gdf, name_to_box, delete_directory_contents
 import geopandas as gpd
 import numpy as np
 
@@ -21,13 +20,8 @@ def merge_dir_and_save(dir_path, save_dir_path, save_name='merged_data.tif'):
     merged = merge_all_in_dir(dir_path)
     merged = merged.fillna(0)
     profile = dict(
-        driver='GTiff',
-        crs=merged.rio.crs,
-        transform=merged.rio.transform(),
-        dtype=merged.dtype,
-        width=merged.rio.width,
-        height=merged.rio.height,
-        count=merged.rio.count
+        driver='GTiff', crs=merged.rio.crs, transform=merged.rio.transform(), dtype=merged.dtype,
+        width=merged.rio.width, height=merged.rio.height, count=merged.rio.count
     )
     with rio.open(save_dir_path/save_name, 'w', **profile) as rio_f:
         rio_f.write(merged.to_numpy())
@@ -79,11 +73,8 @@ def open_intersecting_rasters(files_to_merge: list,
                       (x_min - x_extra <= array.x) & (array.x <= x_max + x_extra)
                       ]
             if 0 not in sub_arr.shape:
-                # subarray = array.rio.reproject_match(target_array, Resampling=Resampling.cubic)
                 sub_arr = sub_arr.where(sub_arr < 1e30, other=array.rio.nodata)
                 arrays.append(sub_arr)
-                # if not np.all(subarray == np.nan):
-                #     pass
     return arrays
 
 
@@ -95,7 +86,9 @@ def mean_merge(arrays, target_array):
     final_array = final_array.rio.set_nodata(np.nan)
     arrays = [array.astype(np.float32) for array in arrays]
     arrays = np.stack([
-        array.rio.set_nodata(np.nan).rio.reproject_match(target_array, resampling=Resampling.nearest).data for array in arrays
+        array.rio.set_nodata(np.nan).rio.reproject_match(
+            target_array, resampling=Resampling.nearest
+        ).data for array in arrays
     ])
     mean_array = np.nansum(arrays, axis=0)
     mean_array = mean_array[0:-1]/mean_array[-1:]
@@ -126,12 +119,9 @@ def open_intersecting_rasters_reproject_first(files_to_merge: list,
                       (x_min - x_extra <= array.x) & (array.x <= x_max + x_extra)
                       ]
             if 0 not in sub_arr.shape:
-                # subarray = array.rio.reproject_match(target_array, Resampling=Resampling.cubic)
                 sub_arr = sub_arr.where(sub_arr < 1e30, other=array.rio.nodata)
                 sub_arr = sub_arr.rio.reproject_match(target_array, resampling=resampling)
                 arrays.append(sub_arr)
-                # if not np.all(subarray == np.nan):
-                #     pass
     return arrays
 
 
@@ -148,7 +138,6 @@ def merge_data_reproject_first(
             else:
                 dtype = arrays[0].dtype
                 final_array = merge_arrays(arrays)
-                # final_array = final_array.rio.reproject_match(target_array, resampling=resampling)
                 final_array = final_array.astype(dtype)
             return final_array
     return None
@@ -260,35 +249,9 @@ def cut_data_to_match(
             'use_mean_merge': use_mean_merge,
         } for i in range(num_proc*4)
     ]
-    my_pool(
-            num_proc=num_proc, func=cut_data_to_image_and_save,
-            input_list=input_list, use_kwargs=True
-    )
-
-
-# def make_directory_gdf(dir_path: Path, use_name: bool = True):
-#     dir_name = dir_path.name
-#     parquet_path = dir_path/f'{dir_name}.parquet'
-#     if not parquet_path.exists():
-#         file_paths = list(dir_path.glob('*.tif'))
-#         dir_gdf = {'file_name': [], 'geometry': []}
-#         for file in file_paths:
-#             dir_gdf['file_name'].append(file.name)
-#             if use_name:
-#                 dir_gdf['geometry'].append(name_to_box(file.name, 0))
-#             else:
-#                 with rio.open(file) as rio_f:
-#                     box = shapely.box(*rio_f.bounds)
-#                 dir_gdf['geometry'].append(box)
-#         dir_gdf = gpd.GeoDataFrame(dir_gdf, crs=4326)
-#         dir_gdf.to_parquet(parquet_path)
-#     else:
-#         dir_gdf = gpd.read_parquet(parquet_path)
-#         if len(dir_gdf) != len(list(dir_path.glob('*.tif'))):
-#             os.remove(parquet_path)
-#             dir_gdf = make_directory_gdf(dir_path)
-#     return dir_gdf
-
+    SharedMemoryPool(
+        num_proc=num_proc, func=cut_data_to_image_and_save, input_list=input_list, use_kwargs=True
+    ).run()
 
 
 def cut_data_to_match_file_list(
@@ -320,8 +283,8 @@ def cut_data_to_match_file_list(
             'resampling': resampling
         } for i in range(num_proc*num_per_proc)
     ]
-    my_pool(
-            num_proc=num_proc, func=cut_data_to_image_and_save_using_data_gdf,
-            input_list=input_list, use_kwargs=True, print_progress=False
-    )
+    SharedMemoryPool(
+        num_proc=num_proc, func=cut_data_to_image_and_save_using_data_gdf,
+        input_list=input_list, use_kwargs=True, print_progress=False
+    ).run()
 

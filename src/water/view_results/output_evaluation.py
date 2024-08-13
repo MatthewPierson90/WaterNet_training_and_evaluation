@@ -5,11 +5,11 @@ import torch
 import rasterio as rio
 import matplotlib
 from matplotlib.widgets import Button
-from water.basic_functions import ppaths, open_json, save_json
+from water.basic_functions import open_json, save_json
+from water.paths import ppaths
 import rioxarray as rxr
-from water.data_functions.clean.merge_waterway_data import ww_val_to_per
-from water.data_functions.load.load_waterway_data_v3 import SenElBurnedLoader, SenBurnedLoader
-from water.training.evaluate_model import get_input_files
+from water.data_functions.load.load_waterway_data import SenElBurnedLoader, SenBurnedLoader
+from water.training.test_model import get_input_files
 import geopandas as gpd
 from pathlib import Path
 import shapely
@@ -24,7 +24,7 @@ def decrease_y(y, num_factors):
     return y
 
 def open_hu4_parquet_data(index):
-    return gpd.read_parquet(ppaths.waterway/f'hu4_parquet/hu4_{index:04d}.parquet')
+    return gpd.read_parquet(ppaths.training_data/f'hu4_parquet/hu4_{index:04d}.parquet')
 
 def make_input_output_files(output_dir: Path, input_files: list[Path]):
     output_files = [output_dir/file.parent.name/file.name for file in input_files]
@@ -34,7 +34,7 @@ def make_input_output_files(output_dir: Path, input_files: list[Path]):
 class Chooser:
     def __init__(self, model_number, clear_seen=False,
                  eval_files=None, path_pairs=None,
-                 eval_dir=ppaths.waterway/'model_inputs_224',
+                 eval_dir=ppaths.training_data/'model_inputs_224',
                  output_dir=None,
                  data_loader: SenBurnedLoader = SenBurnedLoader(),
                  decrease_steps=2,
@@ -45,7 +45,7 @@ class Chooser:
         self.data_loader = data_loader
         self.eval_dir = eval_dir
         self.seen_path = eval_dir/f'good_bad_ugly_model_eval.json'
-        self.hu4_hulls = gpd.read_parquet(ppaths.waterway/'hu4_hulls.parquet')
+        self.hu4_hulls = gpd.read_parquet(ppaths.training_data/'hu4_hulls.parquet')
         self.hull_tree = shapely.STRtree(self.hu4_hulls.geometry.to_list())
         self.index_to_hu4_index = {ind: idx for ind, idx in enumerate(self.hu4_hulls.hu4_index)}
         self.current_hu4 = 0
@@ -594,9 +594,9 @@ def df_to_latex_tabular(df: pd.DataFrame):
 if __name__ == '__main__':
     import seaborn as sns
     from water.basic_functions import printdf
-    inputs_832 = ppaths.waterway/'model_inputs_832'
+    inputs_832 = ppaths.training_data/'model_inputs_832'
     data_dict = defaultdict(list)
-    # inputs_832 = ppaths.waterway/'model_inputs_224'
+    # inputs_832 = ppaths.training_data/'model_inputs_224'
     # new_index = 825
     new_index = 841
     # new_index = 834
@@ -723,7 +723,7 @@ if __name__ == '__main__':
     #     output_dir=inputs_832/f'output_val_data_{new_index}', decrease_steps=1
     # )
 
-    hulls_df = gpd.read_parquet(ppaths.waterway/'hu4_hulls.parquet')
+    hulls_df = gpd.read_parquet(ppaths.training_data/'hu4_hulls.parquet')
     hulls_df = hulls_df.reset_index()
     # hulls_all = shapely.unary_union(hulls_df.geometry)
     df_832['geometry'] = df_832.file_name.apply(name_to_shapely_box)
@@ -789,7 +789,7 @@ if __name__ == '__main__':
         output_dir=inputs_832/f'output_val_data_{new_index}', decrease_steps=1
     )
 
-    # df.to_parquet(ppaths.waterway/'model_inputs_832/val_shp.parquet')
+    # df.to_parquet(ppaths.training_data/'model_inputs_832/val_shp.parquet')
     # bottom_f1 = df_832['f1'].quantile(.25)
     # top_f1 = df_832['f1'].quantile(.85)
     #
@@ -797,11 +797,11 @@ if __name__ == '__main__':
     # bottom_p = df_832['p_f'].quantile(.25)
     # bottom_r = df_832['r_f'].quantile(.25)
     # df_832['keep'] = df_832[['file_name', 'f1']].apply(
-    #     lambda x: (ppaths.waterway/f'model_inputs_832/input_data/{x.file_name}').exists() and x.f1>bottom_f1 and x.f1<top_f1
+    #     lambda x: (ppaths.training_data/f'model_inputs_832/input_data/{x.file_name}').exists() and x.f1>bottom_f1 and x.f1<top_f1
     #     , axis=1
     # )
     # df_832['keep'] = df_832[['file_name', 'f1', 'p_f', 'r_f']].apply(
-    #     lambda x: (ppaths.waterway/f'model_inputs_832/input_data/{x.file_name}').exists() and x.f1>bottom_f1
+    #     lambda x: (ppaths.training_data/f'model_inputs_832/input_data/{x.file_name}').exists() and x.f1>bottom_f1
     #     , axis=1
     # )
     # print(len(df_832))
@@ -809,7 +809,7 @@ if __name__ == '__main__':
     # print(len(df_keep_832))
     # printdf(df_keep_832[['file_name']])
     #
-    # inputs_224 = ppaths.waterway/'model_inputs_224'
+    # inputs_224 = ppaths.training_data/'model_inputs_224'
     # inputs_dir = inputs_224/'input_data'
     # file_names = []
     # for file_name in df_keep_832.file_name:
@@ -953,12 +953,12 @@ if __name__ == '__main__':
     # print('832')
     # printdf(df_832.describe(.01*i for i in range(1, 10)), 100)
 
-    # chooser = Chooser(eval_dir=ppaths.waterway/'model_inputs_832')
+    # chooser = Chooser(eval_dir=ppaths.training_data/'model_inputs_832')
     
     # try:
     #     df
     # except:
-    #     df = pd.read_csv(ppaths.waterway/'model_evaluation/evaluation_stats.csv')
+    #     df = pd.read_csv(ppaths.training_data/'model_evaluation/evaluation_stats.csv')
     
     # print(df.columns)
     # to_keep = df[~((df.a_f < .5) & (df.p_f>.65)
@@ -977,19 +977,19 @@ if __name__ == '__main__':
     # printdf(df.describe(.01*i for i in range(1, 20)), 100)
     # # #
     # # #
-    # file_paths = [ppaths.waterway/f'model_evaluation/input_data/{file}' for file in files]
+    # file_paths = [ppaths.training_data/f'model_evaluation/input_data/{file}' for file in files]
     # chooser = Chooser(eval_files=file_paths)
     # print(len(df_keep), len(df), len(df) - len(df_keep))
     # df_keep = df[~(((df.recall<.5) & (df.precision<.5)) | ((df.accuracy<.75) & ((df.recall<.75) | (df.precision>.25)) ))]
     # df_keep = df_keep.reset_index(drop=True)
-    # df_keep.to_parquet(ppaths.waterway/'model_evaluation/new_inputs.parquet')
+    # df_keep.to_parquet(ppaths.training_data/'model_evaluation/new_inputs.parquet')
     # sns.displot(data=df_keep, x='precision')
     # sns.displot(data=df_keep, x='recall')
     # try:
     #     df1, df2
     # except:
-    #     df1 = pd.read_csv(ppaths.waterway/'model_evaluation/evaluation_stats.csv')
-    #     df2 = pd.read_csv(ppaths.waterway/'model_evaluation/evaluation_stats_1.csv')
+    #     df1 = pd.read_csv(ppaths.training_data/'model_evaluation/evaluation_stats.csv')
+    #     df2 = pd.read_csv(ppaths.training_data/'model_evaluation/evaluation_stats_1.csv')
     #
     #     df1 = df1.sort_values(by='file_name').reset_index(drop=True)
     #     df2 = df2.sort_values(by='file_name').reset_index(drop=True)
@@ -1014,7 +1014,7 @@ if __name__ == '__main__':
     #         )
     # )]
     # # print(len(df1))
-    # df1_keep1.to_parquet(ppaths.waterway/'model_evaluation/new_inputs.parquet')
+    # df1_keep1.to_parquet(ppaths.training_data/'model_evaluation/new_inputs.parquet')
     # printdf(df1_keep1.describe(.05*i for i in range(1,20)),100)
     # print(len(df1_keep1), len(df2_keep))
 
@@ -1030,6 +1030,6 @@ if __name__ == '__main__':
     #
     # # printdf(df[df.diffs<-.15], 100)
     # # #
-    # file_paths = [ppaths.waterway/f'model_evaluation/input_data/{file}' for file in files]
+    # file_paths = [ppaths.training_data/f'model_evaluation/input_data/{file}' for file in files]
     # chooser = Chooser(eval_files=file_paths)
     # chooser = Chooser()

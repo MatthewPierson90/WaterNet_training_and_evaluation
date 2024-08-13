@@ -2,14 +2,11 @@ import rasterio as rio
 from rasterio.warp import Resampling
 import xarray as xr
 import rioxarray as rxr
-from rioxarray.merge import merge_arrays, merge_datasets
+from rioxarray.merge import merge_arrays
 import shapely
-from water.basic_functions import (ppaths, tt, time_elapsed, my_pool, Path, Iterable,
-                                   file_name_to_bbox, name_to_box, delete_directory_contents)
+from water.basic_functions import tt, time_elapsed, SharedMemoryPool, Path, Iterable, name_to_box
+from water.paths import ppaths
 import numpy as np
-import matplotlib
-# matplotlib.use()
-import matplotlib.pyplot as plt
 
 
 def merge_file_list(file_list: Iterable[Path]) -> rxr.raster_array:
@@ -125,7 +122,7 @@ def reproject_match_data(
 
 def cut_data_to_image_and_save(
         image_paths: list, data_dir: Path,
-        base_dir_path: Path = ppaths.waterway/f'country_data',
+        base_dir_path: Path = ppaths.training_data/f'country_data',
 ) -> None:
     for image_path in image_paths:
         image_path = image_path/'waterways_burned.tif'
@@ -161,7 +158,7 @@ def cut_data_to_match_file_list(
         data_dir: Path,
         file_paths: list[Path],
         num_proc: int = 12,
-        base_dir_path: dir = ppaths.waterway/f'country_data/',
+        base_dir_path: dir = ppaths.training_data/f'country_data/',
         **kwargs
 ):
     if not base_dir_path.exists():
@@ -174,14 +171,14 @@ def cut_data_to_match_file_list(
             'base_dir_path': base_dir_path
         } for i in range(num_proc)
     ]
-    my_pool(
+    SharedMemoryPool(
             num_proc=num_proc, func=cut_data_to_image_and_save,
             input_list=input_list, use_kwargs=True, print_progress=False
-    )
+    ).run()
 
 if __name__ == '__main__':
     all_files = []
-    data_dir = ppaths.waterway/'model_inputs_208'
+    data_dir = ppaths.training_data/'model_inputs_208'
     init_dir = data_dir/'input_data'
     base_dirs = list(init_dir.glob('*'))[:1000]
     for sub_dir in base_dirs:
@@ -189,50 +186,9 @@ if __name__ == '__main__':
     # print(all_files)
     s = tt()
     cut_data_to_match_file_list(
-        data_dir=ppaths.waterway/'sentinel', file_paths=all_files[:1000], base_dir_path=data_dir, num_proc=15
+        data_dir=ppaths.training_data/'sentinel', file_paths=all_files[:1000], base_dir_path=data_dir, num_proc=15
     )
     cut_data_to_match_file_list(
-        data_dir=ppaths.waterway/'elevation_cut', file_paths=all_files[:1000], base_dir_path=data_dir, num_proc=15
+        data_dir=ppaths.training_data/'elevation_cut', file_paths=all_files[:1000], base_dir_path=data_dir, num_proc=15
     )
     time_elapsed(s)
-# if __name__ == '__main__':
-    # boxes = [name_to_box(file.name)
-    # for file in (ppaths.waterway/'country_data/sentinel_4326').glob('*')]
-    # ax = gpd.GeoSeries(boxes, crs=4326).plot()
-    # other_box = [name_to_box('bbox_30.2731202433_1.9420313017_30.3018829879_1.9709709574.tif')]
-    # gpd.GeoSeries(other_box, crs=4326).plot(ax=ax, color='red')
-    # find_intersections(
-    # ppaths.waterway/'bbox_30.2731202433_1.9420313017_30.3018829879_1.9709709574.tif',
-    # 'sentinel_4326'
-    # )
-    # cut_all_elevation(country='rwanda', num_proc=2)
-    # cut_data_to_match('rwanda', 'output_data', num_proc=14, match_dir_name='out_temp')
-
-    # cut_data_to_match('zambia', ppaths.waterway/'country_data/zambia/output_data',
-    #                   num_proc=14, match_dir_name='out_temp'
-    #                   )
-    # cut_data_to_match('rwanda', 'elevation')
-    # cut_data_to_match('uganda', 'sentinel_4326', num_proc=1)
-    # cut_data_to_match('rwanda', 'sentinel_4326')
-
-    # bb1 = name_to_box('bbox_29.9985370012_-2.8255029855_30.0273174900_-2.7965634965.tif')
-    # print(bb1)
-    # for file in (ppaths.waterway/'country_data/rwanda/sentinel_4326').glob('*'):
-    #     bb2 = name_to_box(file.name)
-    #     print(bb2, bb2.intersects(bb1))
-    # cut_data_to_match('rwanda', 'sentinel_4326')
-
-    # sen_files = list((ppaths.waterway/'country_data/rwanda/sentinel_4326').glob('*'))
-    # el_files = list((ppaths.waterway/'country_data/rwanda/elevation').glob('*'))
-    # # merge_data(sen_files, el_files[10])
-    # sen_file = sen_files[0]
-    # el_file = el_files[0]
-    # sen = rxr.open_rasterio(sen_file)
-    # el = rxr.open_rasterio(el_file)
-    # print(sen)
-    # print(el)
-    # merged = merge_arrays(
-    # [rxr.open_rasterio(file)
-    # for file in (ppaths.waterway/'country_data/rwanda/sentinel').glob('*')
-    # ]
-    # )

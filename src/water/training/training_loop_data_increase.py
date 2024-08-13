@@ -154,11 +154,6 @@ def train_inner_loop(model_container: 'ModelContainer',
         to_save_inds = np.random.choice(range(0, num_its - 1), size=save_steps, replace=False)
 
         for ind, batch_step in enumerate(range(0, len_data, batch_size)):
-            # real_batch_size = training_data_sub[batch_step: batch_step + batch_size].shape[0]
-            # x, y, weights = make_tensors(
-            #     data=training_data_sub[batch_step: batch_step + batch_size], dtype=dtype, num_y=num_y,
-            #     weights=training_weights_sub[batch_step: batch_step + batch_size], device=device
-            # )
             x_sub, y_sub = x[batch_step: batch_step + batch_size], y[batch_step: batch_step + batch_size]
             to_save = ind in to_save_inds
             if to_save:
@@ -194,7 +189,7 @@ def train_inner_loop(model_container: 'ModelContainer',
 
 class DataSaver:
     def __init__(self, num_steps=2, save_ind=0):
-        self.save_path = ppaths.waterway / f'model_results/training_batch_{save_ind}'
+        self.save_path = ppaths.training_data / f'model_results/training_batch_{save_ind}'
         self.data_to_save = defaultdict(list)
         self.num_steps = num_steps
         self.current_step = 0

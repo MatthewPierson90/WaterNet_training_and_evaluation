@@ -1,1 +1,10 @@
-.idea
+/.eggs
+/data
+/.idea
+/src/water.egg-info
+/configuration_files/path_configuration.yaml
+*__pycache__*
+*.c
+*.so
+*.html
+/build

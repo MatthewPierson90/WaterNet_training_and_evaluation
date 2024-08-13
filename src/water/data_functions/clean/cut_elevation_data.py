@@ -4,7 +4,8 @@ from rasterio.warp import Resampling
 import rioxarray as rxr
 from rioxarray.merge import merge_arrays, merge_datasets
 import shapely
-from water.basic_functions import ppaths, tt, time_elapsed, my_pool, Path
+from water.basic_functions import tt, time_elapsed, SharedMemoryPool
+from water.basic_functions import ppaths, Path
 import geopandas as gpd
 import numpy as np
 import matplotlib.pyplot as plt
@@ -21,7 +22,7 @@ def name_to_box(file_name):
 
 def find_intersections(image_path, elevation_dir_name='elevation'):
     im_box = name_to_box(image_path.name)
-    elevation_dir = ppaths.waterway/elevation_dir_name
+    elevation_dir = ppaths.training_data/elevation_dir_name
     # elevation_dir = Path('/media/matthew/Behemoth/data/usa_waterway_data/elevation_third')
     elevation_files = list(elevation_dir.glob('*'))
     intersection_files = []
@@ -96,7 +97,7 @@ def cut_elevation_to_image(image_paths,
     for image_path in image_paths:
         # merged_subdir = image_path.parent.name
         merged_name = image_path.name
-        merged_dir = ppaths.waterway/f'{elevation_dir_name}{ts}_cut'
+        merged_dir = ppaths.training_data/f'{elevation_dir_name}{ts}_cut'
         save_path = merged_dir/merged_name
         if not save_path.exists():
             elevation_files = find_intersections(image_path, elevation_dir_name=elevation_dir_name)
@@ -136,10 +137,10 @@ def cut_all_elevation(use_ts=False,
     if use_ts:
         ts = '_ts'
     if sen_path is None:
-        sen_path = ppaths.waterway/f'waterways{ts}_burned'
+        sen_path = ppaths.training_data/f'waterways{ts}_burned'
     
     if sen_path.exists():
-        dir_path = ppaths.waterway/f'{elevation_dir_name}{ts}_cut'
+        dir_path = ppaths.training_data/f'{elevation_dir_name}{ts}_cut'
         if not dir_path.exists():
             dir_path.mkdir(parents=True)
         file_paths = list(sen_path.glob('*'))
@@ -152,19 +153,19 @@ def cut_all_elevation(use_ts=False,
                        'elevation_dir_name': elevation_dir_name
                        }
                       for i in range(num_proc*4)]
-        my_pool(num_proc=num_proc, func=cut_elevation_to_image, input_list=input_list,
-                use_kwargs=True
-                )
+        SharedMemoryPool(
+            num_proc=num_proc, func=cut_elevation_to_image, input_list=input_list, use_kwargs=True
+        ).run()
 
 
 if __name__ == '__main__':
     # for ind in range(100, 2200):
     cut_all_elevation(
-            use_ts=False, sen_path=ppaths.waterway/'waterways_burned',
+            use_ts=False, sen_path=ppaths.training_data/'waterways_burned',
             elevation_dir_name='elevation', num_proc=12
     )
     # cut_all_elevation(
-    #         use_ts=False, sen_path=ppaths.waterway/'waterways_burned',
+    #         use_ts=False, sen_path=ppaths.training_data/'waterways_burned',
     #         elevation_dir_name='sentinel1_vh', num_proc=28
     # )
     # cut_all_elevation(use_ts=False, sen_path=None,
@@ -174,7 +175,7 @@ if __name__ == '__main__':
 
 
 def rename_elevation_files():
-    elevation_dir = ppaths.waterway/'elevation_thirds'
+    elevation_dir = ppaths.training_data/'elevation_thirds'
     # elevation_dir = Path('/media/matthew/Behemoth/data/usa_waterway_data/elevation_third')
     elevation_files = list(elevation_dir.glob('*'))
     for file in elevation_files:

@@ -1,8 +1,7 @@
 import torch
-from water.basic_functions import ppaths
-# from water.models.decrease_conv10ac import WaterwayModel
+from water.paths import ppaths
 from waternet.model import WaterwayModel
-from water.loss_functions.loss_functions import WaterwayLossDecTanimoto, WaterwayLossDecW1
+from water.loss_functions.loss_functions import WaterwayLossDecTanimoto
 from water.data_functions.load.load_waterway_data import (WaterwayDataLoaderV3, SenElBurnedLoaderEval)
 from water.training.batch_scheduler import BatchSizeScheduler
 from water.training.model_container import ModelTrainingContainer
@@ -70,13 +69,13 @@ if __name__ == '__main__':
     # model_container.current_iteration = 8
     # model_container.model_container.schedule_dict['wwm'].required_iterations = 2
     # data_loader = SenElBurnedLoaderEval(
-    #     el_base=ppaths.waterway/'model_inputs_224/temp_cut', elevation_name='elevation_cut',
+    #     el_base=ppaths.training_data/'model_inputs_224/temp_cut', elevation_name='elevation_cut',
     #     value_dict=ww_value_dict
     # )
     # data_load = WaterwayDataLoaderV3(
     #         num_training_images_per_load=1000,
     #         use_pruned_data=False, num_test_inds=2500,
-    #         base_path=ppaths.waterway/'model_inputs_224',
+    #         base_path=ppaths.training_data/'model_inputs_224',
     #         data_loader=data_loader
     # )
     # data_load = WaterwayDataLoaderV3.load(
@@ -99,12 +98,12 @@ if __name__ == '__main__':
     model_container.model_container.schedule_dict['wwm'].max_iterations = 40
     model_container.set_lr(.01, model_name='wwm')
     data_loader = SenElBurnedLoaderEval(
-        el_base=ppaths.waterway/'model_inputs_832/temp_cut', elevation_name='elevation_cut',
+        el_base=ppaths.training_data/'model_inputs_832/temp_cut', elevation_name='elevation_cut',
         value_dict=ww_value_dict
     )
     data_load = WaterwayDataLoaderV3(
         num_training_images_per_load=200, num_test_inds=400, use_pruned_data=False,
-        base_path=ppaths.waterway/'model_inputs_832', data_loader=data_loader,
+        base_path=ppaths.training_data/'model_inputs_832', data_loader=data_loader,
     )
     # data_load = WaterwayDataLoaderV3.load(
     #     842, data_loader=data_loader, clear_temp=False, current_index=14400

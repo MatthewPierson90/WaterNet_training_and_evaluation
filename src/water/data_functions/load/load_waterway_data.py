@@ -1,8 +1,8 @@
 import shutil
 
 import pandas as pd
-from water.basic_functions import ppaths, tt, time_elapsed, save_pickle, \
-    open_pickle, save_yaml, open_yaml, delete_directory_contents
+from water.basic_functions import save_pickle, open_pickle, save_yaml, open_yaml, delete_directory_contents
+from water.paths import ppaths
 from water.data_functions.load.cut_data import cut_data_to_match_file_list
 import numpy as np
 import shapely
@@ -54,21 +54,6 @@ class SentinelOpener(DataOpener):
     def make_veg_indices(self, sen_data: np.ndarray):
         outputs = [computer.compute(sen_data) for computer in self.veg_index_computers]
         return outputs
-
-
-class Sentinel1Opener:
-    def __init__(self):
-        self.vv_opener = DataOpener('sentinel1_vv_cut')
-        self.vh_opener = DataOpener('sentinel1_vh_cut')
-
-    def open_data(self, base_path: Path):
-        vv_data = 2 * self.vv_opener._open_data(base_path).astype(np.float32) / 255 - 1
-        vh_data = 2 * self.vh_opener._open_data(base_path).astype(np.float32) / 255 - 1
-        vh_data[np.isnan(vh_data)] = 0
-        vv_data[np.isnan(vv_data)] = 0
-
-        data = np.concatenate([vv_data, vh_data])
-        return data
 
 
 class ElevationLoader(DataOpener):
@@ -129,23 +114,6 @@ class BurnedWaterwaysOpener(DataOpener):
         return data
 
 
-class BurnedTrailsOpener(DataOpener):
-    def __init__(self, value_dict: dict = None):
-        super().__init__('trails_burned')
-        if value_dict is None:
-            value_dict = {}
-        self.value_dict = value_dict
-
-    def open_data(self, base_path):
-        data = self._open_data(base_path)
-        data = data.astype(np.float32)
-        datac = data.copy()
-        for key, value in self.value_dict.items():
-            data[datac == key] = value
-        return data
-
-
-
 class Loader:
     def __init__(self, **kwargs):
         self._inputs = {key: value for key, value in kwargs.items()}
@@ -184,53 +152,6 @@ class SenElBurnedLoader(Loader):
         elevation_data = self.elevation_opener.open_data(base_path)
         burned_opener = self.burned_opener.open_data(base_path)
         return np.concatenate([sen_data, elevation_data, burned_opener], axis=0)
-
-    def make_veg_computers(self) -> list[VegIndexComputer]:
-        return [NDWIComputer(), NDVIComputer()]
-
-    @classmethod
-    def load(cls, load_path):
-        inputs = open_yaml(load_path)
-        return cls(**inputs)
-
-
-
-class SenElBurnedTrailLoader(Loader):
-    def __init__(
-            self, el_base: Path, include_veg_indices: bool = True,
-            elevation_name: str = 'elevation_cut',
-            include_derivatives: bool = True,
-            elevation_scale_value: float = 1.,
-            waterway_value_dict: dict = None,
-            trail_value_dict: dict = None,
-            **kwargs
-    ):
-        self.el_base = el_base
-        self._inputs = dict(
-            include_veg_indices=include_veg_indices, elevation_name=elevation_name,
-            waterway_value_dict=waterway_value_dict, trail_value_dict=trail_value_dict,
-            include_derivatives=include_derivatives, elevation_scale_value=elevation_scale_value
-        )
-        self._inputs.update(kwargs)
-        super().__init__(**self._inputs)
-        veg_computers = []
-        if include_veg_indices:
-            veg_computers = self.make_veg_computers()
-        self.sentinel_opener = SentinelOpener(veg_index_computers=veg_computers)
-        self.elevation_opener = ElevationLoader(
-            elevation_name, include_derivatives=include_derivatives,
-            scale_value=elevation_scale_value
-        )
-        self.burned_opener = BurnedWaterwaysOpener(value_dict=waterway_value_dict)
-        self.trail_opener = BurnedTrailsOpener(value_dict=trail_value_dict)
-
-    def open_data(self, base_path: Path) -> np.ndarray:
-        base_el = self.el_base/base_path.name
-        sen_data = self.sentinel_opener.open_data(base_path)
-        elevation_data = self.elevation_opener.open_data(base_el)
-        burned_opener = self.burned_opener.open_data(base_path)
-        trail_opener = self.trail_opener.open_data(base_path)
-        return np.concatenate([sen_data, elevation_data, burned_opener, trail_opener], axis=0)
 
     def make_veg_computers(self) -> list[VegIndexComputer]:
         return [NDWIComputer(), NDVIComputer()]
@@ -283,207 +204,6 @@ class SenElBurnedLoaderEval(Loader):
         inputs = open_yaml(load_path)
         return cls(**inputs)
 
-class SenElTrailLoaderEval(Loader):
-    def __init__(
-            self, el_base: Path,
-            include_veg_indices: bool = True,
-            elevation_name: str = 'elevation_cut',
-            include_derivatives: bool = True,
-            elevation_scale_value: float = 1.,
-            value_dict: dict = None,
-            **kwargs
-    ):
-        self._inputs = dict(
-            include_veg_indices=include_veg_indices, elevation_name=elevation_name, value_dict=value_dict,
-            include_derivatives=include_derivatives, elevation_scale_value=elevation_scale_value
-        )
-        self.el_base = el_base
-        self._inputs.update(kwargs)
-        super().__init__(**self._inputs)
-        veg_computers = []
-        if include_veg_indices:
-            veg_computers = self.make_veg_computers()
-        self.sentinel_opener = SentinelOpener(veg_index_computers=veg_computers)
-        self.elevation_opener = ElevationLoader(
-            elevation_name, include_derivatives=include_derivatives,
-            scale_value=elevation_scale_value
-        )
-        self.burned_opener = BurnedTrailsOpener(value_dict=value_dict)
-
-    def open_data(self, base_path: Path) -> np.ndarray:
-        base_el = self.el_base/base_path.name
-        sen_data = self.sentinel_opener.open_data(base_path)
-        elevation_data = self.elevation_opener.open_data(base_el)
-        burned_opener = self.burned_opener.open_data(base_path)
-        return np.concatenate([sen_data, elevation_data, burned_opener], axis=0)
-
-    def make_veg_computers(self) -> list[VegIndexComputer]:
-        return [NDWIComputer(), NDVIComputer()]
-
-    @classmethod
-    def load(cls, load_path):
-        inputs = open_yaml(load_path)
-        return cls(**inputs)
-
-class SenBurnedTrailLoader(Loader):
-    def __init__(
-            self, include_veg_indices: bool = False,
-            value_dict: dict = None,
-            **kwargs
-    ):
-        self._inputs = dict(
-            include_veg_indices=include_veg_indices, value_dict=value_dict,
-        )
-        self._inputs.update(kwargs)
-        super().__init__(**self._inputs)
-        veg_computers = []
-        if include_veg_indices:
-            veg_computers = self.make_veg_computers()
-        self.sentinel_opener = SentinelOpener(veg_index_computers=veg_computers)
-        self.burned_opener = BurnedWaterwaysOpener()
-        self.trail_opener = BurnedTrailsOpener()
-    def open_data(self, base_path: Path) -> np.ndarray:
-        sen_data = self.sentinel_opener.open_data(base_path)
-        burned_opener = self.burned_opener.open_data(base_path)
-        trail_data = self.trail_opener.open_data(base_path)
-        return np.concatenate([sen_data, burned_opener, trail_data], axis=0)
-
-    def make_veg_computers(self) -> list[VegIndexComputer]:
-        return [NDWIComputer(), NDVIComputer()]
-
-    @classmethod
-    def load(cls, load_path):
-        inputs = open_yaml(load_path)
-        return cls(**inputs)
-
-
-class SenSenElBurnedLoader(Loader):
-    def __init__(
-            self, include_veg_indices: bool = True,
-            elevation_name: str = 'elevation_cut',
-            include_derivatives: bool = True,
-            elevation_scale_value: float = 1.,
-            value_dict: dict = None,
-            **kwargs
-    ):
-        self._inputs = dict(
-            include_veg_indices=include_veg_indices, elevation_name=elevation_name, value_dict=value_dict,
-            include_derivatives=include_derivatives, elevation_scale_value=elevation_scale_value
-        )
-        self._inputs.update(kwargs)
-        super().__init__(**self._inputs)
-        veg_computers = []
-        if include_veg_indices:
-            veg_computers = self.make_veg_computers()
-        self.sentinel_opener = SentinelOpener(veg_index_computers=veg_computers)
-        self.sentinel1_opener = Sentinel1Opener()
-        self.elevation_opener = ElevationLoader(
-            elevation_name, include_derivatives=include_derivatives,
-            scale_value=elevation_scale_value
-        )
-        self.burned_opener = BurnedWaterwaysOpener(value_dict=value_dict)
-
-    def open_data(self, base_path: Path) -> np.ndarray:
-        sen_data = self.sentinel_opener.open_data(base_path)
-        sen1_data = self.sentinel1_opener.open_data(base_path)
-        elevation_data = self.elevation_opener.open_data(base_path)
-        burned_opener = self.burned_opener.open_data(base_path)
-        return np.concatenate([sen_data, sen1_data, elevation_data, burned_opener], axis=0)
-
-    def make_veg_computers(self) -> list[VegIndexComputer]:
-        return [NDWIComputer(), NDVIComputer()]
-
-    @classmethod
-    def load(cls, load_path):
-        inputs = open_yaml(load_path)
-        return cls(**inputs)
-
-
-class ElSenElLoader(Loader):
-    def __init__(
-            self,
-            elevation_input_name: str = 'elevation_cut',
-            include_derivatives: bool = True,
-            elevation_output_name: str = 'elevation_thirds_cut',
-            **kwargs
-    ):
-        self._inputs = dict(
-            elevation_input_name=elevation_input_name, include_derivatives=include_derivatives,
-            elevation_output_name=elevation_output_name
-        )
-        self._inputs.update(kwargs)
-        super().__init__(**self._inputs)
-        self.sentinel1_opener = Sentinel1Opener()
-        self.elevation_input_opener = ElevationLoader(
-            elevation_input_name, include_derivatives=include_derivatives, rescale=False,
-            scale_value=1
-        )
-        self.elevation_output_opener = ElevationLoader(
-            elevation_output_name, include_derivatives=False, rescale=False,
-            scale_value=1
-        )
-
-    def open_data(self, base_path: Path) -> np.ndarray:
-        sen1_data = self.sentinel1_opener.open_data(base_path)
-        elevation_inputs = self.elevation_input_opener.open_data(base_path)
-        elevation_outputs = self.elevation_output_opener.open_data(base_path)
-
-        return np.concatenate([elevation_inputs, sen1_data, elevation_outputs], axis=0)
-
-    @classmethod
-    def load(cls, load_path):
-        inputs = open_yaml(load_path)
-        return cls(**inputs)
-
-
-class ElSenSenElLoader(Loader):
-    def __init__(
-            self,
-            elevation_input_name: str = 'elevation_cut',
-            include_derivatives: bool = False,
-            elevation_output_name: str = 'elevation_thirds_cut',
-            **kwargs
-    ):
-        self._inputs = dict(
-            elevation_input_name=elevation_input_name, include_derivatives=include_derivatives,
-            elevation_output_name=elevation_output_name
-        )
-        self._inputs.update(kwargs)
-        super().__init__(**self._inputs)
-        self.sentinel1_opener = Sentinel1Opener()
-        self.sentinel2_opener = SentinelOpener()
-        self.elevation_input_opener = ElevationLoader(
-            elevation_input_name, include_derivatives=include_derivatives, rescale=False,
-            scale_value=1
-        )
-        self.elevation_output_opener = ElevationLoader(
-            elevation_output_name, include_derivatives=False, rescale=False,
-            scale_value=1
-        )
-
-    def open_data(self, base_path: Path) -> np.ndarray:
-        sen1_data = self.sentinel1_opener.open_data(base_path)
-        sen2_data = self.sentinel2_opener.open_data(base_path)
-        elevation_inputs = self.elevation_input_opener.open_data(base_path)
-        elevation_outputs = self.elevation_output_opener.open_data(base_path)
-
-        return np.concatenate([elevation_inputs, sen2_data, sen1_data, elevation_outputs], axis=0)
-
-    @classmethod
-    def load(cls, load_path):
-        inputs = open_yaml(load_path)
-        return cls(**inputs)
-
-
-def one_hot(y: np.ndarray, num_classes):
-    num, rows, cols = y.shape
-    one_hot = np.zeros((num, num_classes, rows, cols), dtype=np.uint8)
-    y = y.astype(np.uint8)
-    for i in range(num_classes):
-        ex, rows, cols = np.where(y == i)
-        one_hot[ex, i, rows, cols] = 1
-    return one_hot
-
 
 def copy_burned_files(file_paths, dst_dir):
     for file_path in file_paths:
@@ -491,6 +211,7 @@ def copy_burned_files(file_paths, dst_dir):
         if not save_dir.exists():
             save_dir.mkdir()
         shutil.copytree(file_path, save_dir, dirs_exist_ok=True)
+
 
 def mk_dirs(file_paths, dst_dir):
     for file_path in file_paths:
@@ -504,7 +225,7 @@ def cut_next_file_set(file_paths, base_dir_path, num_proc=15):
     mk_dirs(file_paths, base_dir_path)
     num_per = int(np.ceil(len(file_paths) / num_proc))
     cut_data_to_match_file_list(
-        data_dir=ppaths.waterway/'elevation_cut', file_paths=file_paths, base_dir_path=base_dir_path, num_proc=num_proc
+        data_dir=ppaths.training_data/'elevation_cut', file_paths=file_paths, base_dir_path=base_dir_path, num_proc=num_proc
     )
 
 
@@ -517,8 +238,6 @@ def make_save_next_temp_file(input_list: list,
                              ):
     data = []
     cut_next_file_set(file_paths=input_list, base_dir_path=temp_cut_dir, num_proc=num_proc)
-    # load_file_paths = temp_cut_dir.iterdir()
-    # for file_path in load_file_paths:
     for file_path in input_list:
         loaded = data_loader.open_data(file_path)
         if np.any(np.isnan(loaded)) or np.any(np.isinf(loaded)):
@@ -554,7 +273,7 @@ def get_file_info_dict(file):
 
 class InputListGenerator:
     def __init__(self,
-                 base_path: Path = ppaths.waterway / 'model_inputs',
+                 base_path: Path = ppaths.training_data / 'model_inputs',
 
                  ):
         self.base_path = base_path
@@ -638,7 +357,7 @@ class WaterwayDataLoaderV3:
                  data_loader=SenElBurnedLoader(),
                  use_pruned_data: bool = False,
                  _from_load: bool = False,
-                 base_path: Path = ppaths.waterway / 'model_inputs',
+                 base_path: Path = ppaths.training_data / 'model_inputs',
                  **kwargs):
         print('in data loader')
 
@@ -728,7 +447,6 @@ class WaterwayDataLoaderV3:
             'base_path': str(self.base_path),
             'data_loader_module_class': [self.data_loader.__module__, self.data_loader.__class__.__name__]
         }
-        # model_dir = base_dir/f'model_{model_number}'
         if not model_dir.exists():
             model_dir.mkdir(parents=True)
         save_dir = model_dir / 'data_info'
@@ -747,7 +465,7 @@ class WaterwayDataLoaderV3:
     @classmethod
     def load(cls,
              model_number,
-             base_dir=ppaths.waterway / f'model_data',
+             base_dir=ppaths.training_data / f'model_data',
              num_training_images=None,
              epoch=None,
              current_index=None,
@@ -781,58 +499,3 @@ class WaterwayDataLoaderV3:
         ww_data_loader.load_test_data()
         ww_data_loader.make_next_temp_file(info['num_training_images_per_load'])
         return ww_data_loader
-
-if __name__ == '__main__':
-    s = tt()
-    data_load = WaterwayDataLoaderV3(
-            num_training_images_per_load=34, include_veg_indices=True,
-            use_pruned_data=False, num_test_inds=34,
-            base_path=ppaths.waterway/'model_inputs_832'
-    )
-    data_load.load_training_data()
-    data_load.temp_process.join()
-    data_load.temp_process.close()
-    time_elapsed(s)
-    # s = tt()
-    # data_load = WaterwayDataLoaderV3(
-    #         num_training_images_per_load=64, include_veg_indices=True,
-    #         use_pruned_data=False, num_test_inds=64,
-    #         base_path=ppaths.waterway/'model_inputs_832'
-    # )
-    # data_load.load_training_data()
-    # data_load.temp_process.join()
-    # data_load.temp_process.close()
-    # time_elapsed(s)
-    #
-    # s = tt()
-    # data_load = WaterwayDataLoaderV3(
-    #         num_training_images_per_load=96, include_veg_indices=True,
-    #         use_pruned_data=False, num_test_inds=96,
-    #         base_path=ppaths.waterway/'model_inputs_832'
-    # )
-    # data_load.load_training_data()
-    # data_load.temp_process.join()
-    # data_load.temp_process.close()
-    # time_elapsed(s)
-
-
-#     # from pprint import pprint
-#     wwd = WaterwayDataLoaderV3(
-#             num_test_inds=5, num_training_images_per_load=5
-#     )
-#     td = wwd.load_training_data(5)
-#
-# s = tt()
-# ci = wwd.load_n_cut_images(5000)
-# print(list(ci.max(axis=(0, 2, 3))))
-# print(list(ci.mean(axis=(0, 2, 3))))
-# print(list(ci.min(axis=(0, 2, 3))))
-
-# time_elapsed(s)
-# print(ci.shape)
-# print(w.shape)
-
-# print(len(ci))
-# ct = wwd.load_test_data()
-# print(len(ct))
-# print(wwd.current_index,len(wwd.input_list))

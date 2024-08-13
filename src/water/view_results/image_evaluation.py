@@ -1,27 +1,27 @@
 import matplotlib.pyplot as plt
-import pandas as pd
-import shapely
-from matplotlib.widgets import TextBox, RadioButtons
 import numpy as np
-from water.basic_functions import ppaths
-import torch
-from torch import nn
-import rasterio as rio
+from water.paths import ppaths
 from matplotlib.widgets import Button, TextBox
-from water.basic_functions import ppaths, tt, time_elapsed, open_json, save_json, my_pool, save_pickle, open_pickle
+from water.basic_functions import open_json, save_json
 import rioxarray as rxr
-from rasterio.enums import Resampling
-from water.data_functions.clean.merge_waterway_data import ww_val_to_per
 import geopandas as gpd
-import time
-from torch.nn import functional as F
 import warnings
 warnings.simplefilter('ignore', UserWarning)
+
+
+def ww_val_to_per(data):
+    data[data==10] = .1
+    data[data==20] = .25
+    data[data==30] = .4
+    data[data==40] = .6
+    data[data==50] = 1.
+    return data
+
 
 class Chooser:
     def __init__(self, clear_seen=False):
         count = 0
-        self.seen_path = ppaths.waterway/'model_evaluation/good_bad_ugly.json'
+        self.seen_path = ppaths.training_data/'model_evaluation/good_bad_ugly.json'
         self.num_seen = 0
         self.num_good_precision = 0
         self.num_good_recall = 0
@@ -33,7 +33,7 @@ class Chooser:
             self.seen_names = open_json(self.seen_path)
             self.num_seen = len(self.seen_names)
             self.count_current()
-        eval_input_path = ppaths.waterway/'model_evaluation/input_data'
+        eval_input_path = ppaths.training_data/'model_evaluation/input_data'
         eval_files = list(eval_input_path.glob('*'))
         # eval_files.sort(key=lambda x:x.stat().st_mtime, reverse=True)
         np.random.shuffle(eval_files)

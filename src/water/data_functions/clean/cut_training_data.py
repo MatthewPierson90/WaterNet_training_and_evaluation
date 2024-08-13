@@ -1,15 +1,8 @@
-import os
 
-import shapely
-from water.basic_functions import (ppaths, tt, time_elapsed, open_json, save_json,
-                                   my_pool, save_pickle, open_pickle
-                                   )
-import geopandas as gpd
-import torch
-from water.data_functions.clean.merge_waterway_data import open_all_and_merge, ww_val_to_per
 import numpy as np
 import rasterio as rio
-from water.basic_functions import ppaths, my_pool
+from water.basic_functions import SharedMemoryPool
+from water.paths import ppaths
 from rasterio.transform import from_bounds
 from pathlib import Path
 
@@ -34,12 +27,10 @@ class DataGrid:
         self.start_row, self.start_col = 0, 0
     
     def has_missing_data(self):
-        # print('here')
         for val in self.missing_vals:
             if np.any(self.data == val):
                 sum_val = (self.data == val).sum()
                 total = self.data.shape[0]*self.data.shape[1]*self.data.shape[2]
-                # self.data[self.data == val] = np.mean(self.data[self.data != val])
                 print(sum_val/total)
                 if sum_val/total < .1:
                     return False
@@ -193,12 +184,9 @@ def save_data_slice(data_slice: DataSlice, save_dir_path: Path, file_path: Path)
     if not save_dir.exists():
         save_dir.mkdir()
     save_path = save_dir/f'{data_slice.data_name}.tif'
-    # if not save_path.exists():
     save_profile['count'] = count
     save_profile['dtype'] = data.dtype
     save_profile['nodata'] = data_slice.missing_vals[0]
-    # return rio_f
-    # if save_path.exists():
     with rio.open(save_path, 'w', **save_profile) as dst_f:
         dst_f.write(data)
 
@@ -230,14 +218,13 @@ def slice_and_save_data(file: Path, parent_dirs: list[Path], slice_width,
                 print(file.name)
             for slice_ind, data_slices in enumerate(data_slicer.slices):
                 save_data_slices(
-                        data_slices, save_dir_path=save_dir_path,
-                        file_path=file, slice_index=slice_ind
+                        data_slices, save_dir_path=save_dir_path, file_path=file, slice_index=slice_ind
                 )
 
 
 def save_inputs_multi(parent_dirs: list,
                       slice_width: int,
-                      save_dir_path: Path = ppaths.waterway/'model_inputs',
+                      save_dir_path: Path = ppaths.training_data/'model_inputs',
                       num_proc=12, **kwargs
                       ):
     save_dir_path = save_dir_path/'input_data'
@@ -247,14 +234,11 @@ def save_inputs_multi(parent_dirs: list,
     input_list = []
     for file in base_dir.glob('*'):
         inputs = {
-            'file': file,
-            'parent_dirs': parent_dirs,
-            'slice_width': slice_width,
-            'save_dir_path': save_dir_path,
+            'file': file, 'parent_dirs': parent_dirs, 'slice_width': slice_width, 'save_dir_path': save_dir_path,
         }
         inputs.update(**kwargs)
         input_list.append(inputs)
-    my_pool(func=slice_and_save_data, input_list=input_list, use_kwargs=True, num_proc=num_proc)
+    SharedMemoryPool(func=slice_and_save_data, input_list=input_list, use_kwargs=True, num_proc=num_proc).run()
 
 
 def slice_and_save_list_data(files: list[Path], parent_dirs: list[Path], slice_width,
@@ -275,15 +259,17 @@ def check_files(file_list, dirs_to_check):
     return new_list
 
 
-def save_inputs_list_multi(parent_dirs: list,
-                          slice_width: int,
-                          save_dir_path: Path = ppaths.waterway/'model_inputs',
-                           dirs_to_check: list[Path] = (ppaths.waterway/'elevation_cut',
-                                                        ppaths.waterway/'waterways_burned',
-                                                        ppaths.waterway/'sentinel',
-                                                        ),
-                          num_proc=12, **kwargs
-                          ):
+def save_inputs_list_multi(
+        parent_dirs: list,
+        slice_width: int,
+        save_dir_path: Path = ppaths.training_data/'model_inputs',
+        dirs_to_check: list[Path] = (
+                ppaths.training_data/'elevation_cut', ppaths.training_data/'waterways_burned',
+                ppaths.training_data/'sentinel',
+        ),
+        num_proc=12,
+        **kwargs
+):
     base_dir_path = save_dir_path
     save_dir_path = save_dir_path/'input_data'
     if not save_dir_path.exists():
@@ -294,15 +280,7 @@ def save_inputs_list_multi(parent_dirs: list,
     print(len(files))
     files = check_files(files, dirs_to_check=dirs_to_check)
     print(len(files))
-    # print(files[0])
-    files = [file for file in files
-             # if (base_dir_path/f'input_data/{file.name.split(".tif")[0]}').exists()
-             # if not (base_dir_path/f'input_data/{file.name.split(".tif")[0]}').exists()
-             # and not (base_dir_path/f'test_data/{file.name.split(".tif")[0]}').exists()
-             # and not (base_dir_path/f'val_data/{file.name.split(".tif")[0]}').exists()
-             ]
-    # files = files[:1]
-    # print(files)
+    files = [file for file in files]
     print(len(files))
 
     np.random.shuffle(files)
@@ -318,10 +296,10 @@ def save_inputs_list_multi(parent_dirs: list,
         }
         inputs.update(**kwargs)
         input_list.append(inputs)
-    my_pool(func=slice_and_save_list_data, input_list=input_list, use_kwargs=True, num_proc=num_proc)
+    SharedMemoryPool(func=slice_and_save_list_data, input_list=input_list, use_kwargs=True, num_proc=num_proc).run()
 
 if __name__ == '__main__':
-    # base_dir = ppaths.waterway/'model_inputs_832/input_data/'
+    # base_dir = ppaths.training_data/'model_inputs_832/input_data/'
     # for sub_dir in base_dir.glob('*'):
     #     for cut_dir in sub_dir.glob('*'):
     #         with rio.open(cut_dir/'waterways_burned.tif') as rio_f:
@@ -329,10 +307,10 @@ if __name__ == '__main__':
     #         new_path = sub_dir/f'bbox_{w}_{s}_{e}_{n}'
     #         cut_dir.rename(new_path)
     # count = 0
-    # inputs_dir = ppaths.waterway/'model_inputs_224/input_data'
-    # inputs_dir = ppaths.waterway/'model_inputs_224/input_data'
-    # waterways_burned = ppaths.waterway/'waterways_burned'
-    # trails_burned = ppaths.waterway/'trails_burned'
+    # inputs_dir = ppaths.training_data/'model_inputs_224/input_data'
+    # inputs_dir = ppaths.training_data/'model_inputs_224/input_data'
+    # waterways_burned = ppaths.training_data/'waterways_burned'
+    # trails_burned = ppaths.training_data/'trails_burned'
     # for file in (waterways_burned).iterdir():
     #     # file_name = file.name.split('.tif')[0]
     #     print(file.name)
@@ -348,24 +326,24 @@ if __name__ == '__main__':
     #             dst.write(data)
     # print(count)
     pdirs = [
-        ppaths.waterway/'waterways_burned'
+        ppaths.training_data/'waterways_burned'
     ]
     # pdirs = [
-    #     ppaths.waterway/'trails_burned'
+    #     ppaths.training_data/'trails_burned'
     # ]
     num_proc = 30
     # # #
     slicew = 832
     step_size = 832
-    save_to = ppaths.waterway/'model_inputs_832'
+    save_to = ppaths.training_data/'model_inputs_832'
     save_inputs_list_multi(
             save_dir_path=save_to, num_proc=num_proc,
             parent_dirs=pdirs, slice_width=slicew,
             row_step_size=step_size, col_step_size=step_size
     )
-    # files = ppaths.waterway/'model_inputs_832/input_data'
-    # files = ppaths.waterway/'model_inputs_832/test_data'
-    # files = ppaths.waterway/'model_inputs_832/val_data'
+    # files = ppaths.training_data/'model_inputs_832/input_data'
+    # files = ppaths.training_data/'model_inputs_832/test_data'
+    # files = ppaths.training_data/'model_inputs_832/val_data'
     #
     # count = 0
     from water.basic_functions import delete_directory_contents
@@ -387,13 +365,13 @@ if __name__ == '__main__':
         #     break
     # print(count)
     pdirs = [
-        ppaths.waterway/'waterways_burned'
+        ppaths.training_data/'waterways_burned'
     ]
     num_proc = 30
     #
     slicew = 224
     step_size = 224-22
-    save_to = ppaths.waterway/'model_inputs_224'
+    save_to = ppaths.training_data/'model_inputs_224'
     save_inputs_list_multi(
             save_dir_path=save_to, num_proc=num_proc,
             parent_dirs=pdirs, slice_width=slicew,
@@ -404,14 +382,14 @@ if __name__ == '__main__':
 
     # slicew = 416
     # step_size = 416
-    # save_to = ppaths.waterway/'model_inputs_416'
+    # save_to = ppaths.training_data/'model_inputs_416'
     # save_inputs_list_multi(
     #         save_dir_path=save_to, num_proc=num_proc,
     #         parent_dirs=pdirs, slice_width=slicew,
     #         row_step_size=step_size, col_step_size=step_size
     # )
     # # missing_values = [0, np.nan, np.inf, -np.inf]
-    # # for file in (ppaths.waterway/'sentinel1_vv_cut').glob('*'):
+    # # for file in (ppaths.training_data/'sentinel1_vv_cut').glob('*'):
     # #     with rio.open(file) as rio_f:
     # #         data = rio_f.read()
     # #         print(data.dtype)

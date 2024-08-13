@@ -1,8 +1,8 @@
 from water.basic_functions import ppaths, tt, time_elapsed, get_country_polygon, delete_directory_contents
-from water.data_functions.download.merge_us_tiles import merge_save_and_remove_multi
+from water.data_functions.download.merge_sentinel_tiles import merge_save_and_remove_multi
 from water.data_functions.download.download_mpc_data import download_country_list_tiles, CloudSearchInfo
 from water.data_functions.download.download_elevation import download_country_elevation_data
-from water.make_country_waterways.run_polygon_eval import run_polygon_evaluate, get_admin_gdf_from_country_name
+from water.deployment_functions.deploy_on_polygon import run_polygon_evaluate, get_admin_gdf_from_country_name
 from multiprocessing import Process
 from water.update_progress import make_progress_file, update_progress
 
@@ -16,7 +16,7 @@ progress_path = ppaths.base_path/'progress.txt'
 #     'Philippines', 'Malaysia', 'Singapore', 'Brunei', 'Indonesia',
 #     'west bank'
 # ]
-# continent_tile_dir = ppaths.country_data / 'sentinel_tiles_asia'
+# continent_tile_dir = ppaths.evaluation_data / 'sentinel_tiles_asia'
 # download_inputs = dict(
 #     num_proc=8, time_of_interest='2023-03-01/2023-9-30',
 #     save_dir_path=continent_tile_dir,
@@ -25,7 +25,7 @@ progress_path = ppaths.base_path/'progress.txt'
 #     max_percent_remaining=.01
 # )
 # merge_inputs = dict(
-#     base_dir=continent_tile_dir, save_dir=ppaths.country_data/'sentinel_4326', num_proc=6,
+#     base_dir=continent_tile_dir, save_dir=ppaths.evaluation_data/'sentinel_4326', num_proc=6,
 #     num_steps=500
 # )
 # percent_remaining_list = [.6, .7, .8]
@@ -52,7 +52,7 @@ progress_path = ppaths.base_path/'progress.txt'
 
 
 # country_list = ['new guinea', 'new caledonia', 'new zealand']
-continent_tile_dir = ppaths.country_data / 'sentinel_tiles_russia'
+continent_tile_dir = ppaths.evaluation_data / 'sentinel_tiles_russia'
 download_inputs = dict(
     num_proc=8, time_of_interest='2023-04-01/2023-08-30',
     save_dir_path=continent_tile_dir,
@@ -61,7 +61,7 @@ download_inputs = dict(
     max_percent_remaining=.01
 )
 merge_inputs = dict(
-    base_dir=continent_tile_dir, save_dir=ppaths.country_data/'sentinel_4326', num_proc=10,
+    base_dir=continent_tile_dir, save_dir=ppaths.evaluation_data/'sentinel_4326', num_proc=10,
     num_steps=500
 )
 
@@ -103,14 +103,14 @@ for country in country_list:
 #     model_number=model_num, small_land_count=small_land_count, min_water_val=water_accept_per,
 #     num_proc=num_p, num_per=num_per, recut_output_data=recut_output, output_grid_width=output_width,
 #     output_dir_name=output_dir_name, save_name=save_name, output_grid_res=output_grid_res,
-#     base_dir_path=ppaths.country_data
+#     base_dir_path=ppaths.evaluation_data
 # )
 
 
 
 # country_list = ['china']
 #
-# continent_tile_dir = ppaths.country_data / 'sentinel_tiles_asia'
+# continent_tile_dir = ppaths.evaluation_data / 'sentinel_tiles_asia'
 # download_inputs = dict(
 #     num_proc=8, time_of_interest='2023-03-01/2023-9-30',
 #     save_dir_path=continent_tile_dir,
@@ -119,7 +119,7 @@ for country in country_list:
 #     max_percent_remaining=.01
 # )
 # merge_inputs = dict(
-#     base_dir=continent_tile_dir, save_dir=ppaths.country_data/'sentinel_4326', num_proc=6,
+#     base_dir=continent_tile_dir, save_dir=ppaths.evaluation_data/'sentinel_4326', num_proc=6,
 #     num_steps=500
 # )
 # for country in country_list:
@@ -139,7 +139,7 @@ for country in country_list:
 #
 # country_list = ['russia']
 #
-# continent_tile_dir = ppaths.country_data / 'sentinel_tiles_asia'
+# continent_tile_dir = ppaths.evaluation_data / 'sentinel_tiles_asia'
 # download_inputs = dict(
 #     num_proc=8, time_of_interest='2023-03-01/2023-9-30',
 #     save_dir_path=continent_tile_dir,
@@ -148,7 +148,7 @@ for country in country_list:
 #     max_percent_remaining=.01
 # )
 # merge_inputs = dict(
-#     base_dir=continent_tile_dir, save_dir=ppaths.country_data/'sentinel_4326', num_proc=6,
+#     base_dir=continent_tile_dir, save_dir=ppaths.evaluation_data/'sentinel_4326', num_proc=6,
 #     num_steps=500
 # )
 # for country in country_list:
@@ -201,7 +201,7 @@ for country in country_list:
 #     model_number=model_num, small_land_count=small_land_count, min_water_val=water_accept_per,
 #     num_proc=num_p, num_per=num_per, recut_output_data=recut_output, output_grid_width=output_width,
 #     output_dir_name=output_dir_name, save_name=save_name, output_grid_res=output_grid_res,
-#     base_dir_path=ppaths.country_data
+#     base_dir_path=ppaths.evaluation_data
 # )
 # countries = [
 #     'syria', 'iraq', 'iran', 'lebanon', 'jordan', 'israel', 'saudi_arabia', 'oman', 'yemen', 'kuwait',
@@ -216,7 +216,7 @@ for country in country_list:
 # countries = [
 #     'georgia'
 #     ]
-# country_dir = ppaths.country_data/'asia'
+# country_dir = ppaths.evaluation_data/'asia'
 # if not country_dir.exists():
 #     country_dir.mkdir()
 # for ctry_index, ctry in enumerate(countries):

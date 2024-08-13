@@ -4,7 +4,7 @@ import pandas as pd
 
 total_gdf = None
 hulls_to_keep = []
-for file in (ppaths.waterway/'wbd_data').iterdir():
+for file in (ppaths.training_data/'wbd_data').iterdir():
     hu4_file = file/'Shape/WBDHU4.shp'
     gdf = gpd.read_file(hu4_file)
     gdf = gdf[['huc4', 'geometry']]
@@ -14,16 +14,16 @@ for file in (ppaths.waterway/'wbd_data').iterdir():
         total_gdf = pd.concat([total_gdf, gdf], ignore_index=True)
     gdf = gdf.set_index('huc4')
     for hu4_index in gdf.index:
-        if (ppaths.waterway/f'hu4_hull/hu4_{hu4_index}.parquet').exists():
+        if (ppaths.training_data/f'hu4_hull/hu4_{hu4_index}.parquet').exists():
             hulls_to_keep.append(int(hu4_index))
             gdf1 = gdf.loc[hu4_index:hu4_index].reset_index(drop=True)
-            gdf1.to_parquet(ppaths.waterway/f'hu4_hull/hu4_{hu4_index}.parquet')
+            gdf1.to_parquet(ppaths.training_data/f'hu4_hull/hu4_{hu4_index}.parquet')
 
 total_gdf = total_gdf.rename(columns={'huc4': 'hu4_index'})
 total_gdf['hu4_index'] = total_gdf.hu4_index.astype(int)
 total_gdf = total_gdf[total_gdf.hu4_index.isin(hulls_to_keep)]
 total_gdf = total_gdf.sort_values(by='hu4_index')
-total_gdf.to_parquet(ppaths.waterway/'hu4_hulls.parquet')
+total_gdf.to_parquet(ppaths.training_data/'hu4_hulls.parquet')
 # print(gdf.crs)
 # print(gdf.columns)
 # printdf(gdf)
