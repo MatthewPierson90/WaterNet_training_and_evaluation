@@ -40,14 +40,18 @@ def download_nhd_hu4_data(num_proc: int=20):
 def download_wsb_data():
     url = extract_dl_links(Path(__file__).parent.joinpath('wsb_download_link.txt'))[0]
     download_save_path = ppaths.training_data/'WBD_National_GDB.zip'
-    single_download(url, download_save_path, extract_zip_files=False)
+    if not download_save_path.exists():
+        single_download(url, download_save_path, extract_zip_files=False)
     file_path = ppaths.training_data/f'WBD_National_GDB.zip!WBD_National_GDB.gdb'
     gdf = gpd.read_file(file_path, layer='WBDHU4')
     gdf['hu4_index'] = gdf['huc4'].astype(int)
-    gdf = gdf[gdf.huc4.apply(lambda x: (ppaths.hu4_parquet/f'hu4_{x}.parquet').exists())]
+    gdf = gdf[gdf.hu4_index.apply(lambda x: (ppaths.hu4_parquet/f'hu4_{x}.parquet').exists())]
     gdf = gdf.sort_values(by='hu4_index').reset_index(drop=True)
     gdf['hu4_string'] = gdf['huc4']
-    gdf[['hu4_index', 'hu4_string', 'geometry']].to_parquet(ppaths.all_hu4_hulls)
+    gdf[['hu4_index', 'hu4_string', 'geometry']].to_parquet(ppaths.hu4_hulls_parquet)
+    for hu4_string in gdf.hu4_string:
+        sub_gdf = gdf[gdf.hu4_string == hu4_string].reset_index(drop=True)
+        sub_gdf.to_parquet(ppaths.hu4_hull/f'hu4_{hu4_string}.parquet')
 
 
 if __name__ == '__main__':

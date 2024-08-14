@@ -51,14 +51,25 @@ class Proj_paths:
                 self._path_config = {}
         self.data = base / 'data'
         self.training_data = self.add_directory('training_data', self.data)
-        self.country_lookup_data = self.add_directory('country_lookup_data', self.data)
-        self.evaluation_data = self.add_directory('evaluation_data', self.training_data)
-        self.tdx_basins = self.add_directory('tdx_basins', self.evaluation_data)
-        self.tdx_streams = self.add_directory('tdx_streams', self.evaluation_data)
+        self.world_info = self.add_directory('world_info', self.data)
+        self.deploy_data = self.add_directory('deploy_data', self.training_data)
+        self.elevation_data = self.add_directory('elevation', self.deploy_data)
+        self.sentinel_unmerged = self.add_directory('sentinel_unmerged', self.deploy_data)
+        self.sentinel_merged = self.add_directory('sentinel_merged', self.deploy_data)
+        self.tdx_basins = self.add_directory('tdx_basins', self.deploy_data)
+        self.tdx_streams = self.add_directory('tdx_streams', self.deploy_data)
         self.hu4_data = self.add_directory('hu4_data', self.training_data)
         self.hu4_parquet = self.add_directory('hu4_parquet', self.training_data)
         self.hu4_hull = self.add_directory('hu4_hull', self.training_data)
-        self.all_hu4_hulls = self.add_file('hu4_hulls.parquet', self.training_data)
+        self.hu4_hulls_parquet = self.add_file('hu4_hulls.parquet', self.training_data)
+        self.sentinel_tiles_parquet = self.add_file('sentinel_tiles.parquet', self.world_info)
+        self.world_boundaries_parquet = self.add_file('world_boundaries.parquet', self.world_info)
+
+        self.elevation_cut = self.add_directory('elevation_cut', self.training_data)
+        self.sentinel_cut = self.add_directory('sentinel_cut', self.training_data)
+        self.waterways_burned = self.add_directory('waterways_burned', self.training_data)
+        self.model_inputs_832 = self.add_directory('model_inputs_832', self.training_data)
+        self.model_inputs_224 = self.add_directory('model_inputs_224', self.training_data)
 
     def add_directory(self, directory_name: str, directory_parent: Path):
         if directory_name not in self._path_config:

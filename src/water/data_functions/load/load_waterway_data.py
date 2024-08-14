@@ -3,7 +3,6 @@ import shutil
 import pandas as pd
 from water.basic_functions import save_pickle, open_pickle, save_yaml, open_yaml, delete_directory_contents
 from water.paths import ppaths
-from water.data_functions.load.cut_data import cut_data_to_match_file_list
 import numpy as np
 import shapely
 import rasterio as rio
@@ -57,10 +56,8 @@ class SentinelOpener(DataOpener):
 
 
 class ElevationLoader(DataOpener):
-    def __init__(self, elevation_name: str = 'elevation_cut',
-                 include_derivatives=True, scale_value=1., rescale=True
-                 ):
-        super().__init__(elevation_name)
+    def __init__(self,include_derivatives=True, scale_value=1., rescale=True):
+        super().__init__(ppaths.elevation_cut.name)
         self.include_derivatives = include_derivatives
         self.scale_value = scale_value
         self.rescale = rescale
@@ -100,7 +97,7 @@ class ElevationLoader(DataOpener):
 
 class BurnedWaterwaysOpener(DataOpener):
     def __init__(self, value_dict: dict = None):
-        super().__init__('waterways_burned')
+        super().__init__(ppaths.waterways_burned.name)
         if value_dict is None:
             value_dict = {}
         self.value_dict = value_dict
@@ -125,14 +122,13 @@ class Loader:
 class SenElBurnedLoader(Loader):
     def __init__(
             self, include_veg_indices: bool = True,
-            elevation_name: str = 'elevation_cut',
             include_derivatives: bool = True,
             elevation_scale_value: float = 1.,
             value_dict: dict = None,
             **kwargs
     ):
         self._inputs = dict(
-            include_veg_indices=include_veg_indices, elevation_name=elevation_name, value_dict=value_dict,
+            include_veg_indices=include_veg_indices, value_dict=value_dict,
             include_derivatives=include_derivatives, elevation_scale_value=elevation_scale_value
         )
         self._inputs.update(kwargs)
@@ -142,8 +138,7 @@ class SenElBurnedLoader(Loader):
             veg_computers = self.make_veg_computers()
         self.sentinel_opener = SentinelOpener(veg_index_computers=veg_computers)
         self.elevation_opener = ElevationLoader(
-            elevation_name, include_derivatives=include_derivatives,
-            scale_value=elevation_scale_value
+            include_derivatives=include_derivatives, scale_value=elevation_scale_value
         )
         self.burned_opener = BurnedWaterwaysOpener(value_dict=value_dict)
 
@@ -162,39 +157,27 @@ class SenElBurnedLoader(Loader):
         return cls(**inputs)
 
 
-class SenElBurnedLoaderEval(Loader):
+class SenBurnedLoader(Loader):
     def __init__(
-            self, el_base: Path,
-            include_veg_indices: bool = True,
-            elevation_name: str = 'elevation_cut',
-            include_derivatives: bool = True,
-            elevation_scale_value: float = 1.,
+            self, include_veg_indices: bool = True,
             value_dict: dict = None,
             **kwargs
     ):
         self._inputs = dict(
-            include_veg_indices=include_veg_indices, elevation_name=elevation_name, value_dict=value_dict,
-            include_derivatives=include_derivatives, elevation_scale_value=elevation_scale_value
+            include_veg_indices=include_veg_indices, value_dict=value_dict,
         )
-        self.el_base = el_base
         self._inputs.update(kwargs)
         super().__init__(**self._inputs)
         veg_computers = []
         if include_veg_indices:
             veg_computers = self.make_veg_computers()
         self.sentinel_opener = SentinelOpener(veg_index_computers=veg_computers)
-        self.elevation_opener = ElevationLoader(
-            elevation_name, include_derivatives=include_derivatives,
-            scale_value=elevation_scale_value
-        )
         self.burned_opener = BurnedWaterwaysOpener(value_dict=value_dict)
 
     def open_data(self, base_path: Path) -> np.ndarray:
-        base_el = self.el_base/base_path.name
         sen_data = self.sentinel_opener.open_data(base_path)
-        elevation_data = self.elevation_opener.open_data(base_el)
         burned_opener = self.burned_opener.open_data(base_path)
-        return np.concatenate([sen_data, elevation_data, burned_opener], axis=0)
+        return np.concatenate([sen_data, burned_opener], axis=0)
 
     def make_veg_computers(self) -> list[VegIndexComputer]:
         return [NDWIComputer(), NDVIComputer()]
@@ -205,39 +188,13 @@ class SenElBurnedLoaderEval(Loader):
         return cls(**inputs)
 
 
-def copy_burned_files(file_paths, dst_dir):
-    for file_path in file_paths:
-        save_dir = dst_dir/file_path.name
-        if not save_dir.exists():
-            save_dir.mkdir()
-        shutil.copytree(file_path, save_dir, dirs_exist_ok=True)
-
-
-def mk_dirs(file_paths, dst_dir):
-    for file_path in file_paths:
-        save_dir = dst_dir/file_path.name
-        if not save_dir.exists():
-            save_dir.mkdir()
-
-
-def cut_next_file_set(file_paths, base_dir_path, num_proc=15):
-    delete_directory_contents(base_dir_path)
-    mk_dirs(file_paths, base_dir_path)
-    num_per = int(np.ceil(len(file_paths) / num_proc))
-    cut_data_to_match_file_list(
-        data_dir=ppaths.training_data/'elevation_cut', file_paths=file_paths, base_dir_path=base_dir_path, num_proc=num_proc
-    )
-
 
 def make_save_next_temp_file(input_list: list,
                              data_loader: SenElBurnedLoader,
                              temp_dir: Path,
-                             temp_cut_dir: Path,
-                             num_proc: int=15,
                              temp_name: str='next_input.npy'
                              ):
     data = []
-    cut_next_file_set(file_paths=input_list, base_dir_path=temp_cut_dir, num_proc=num_proc)
     for file_path in input_list:
         loaded = data_loader.open_data(file_path)
         if np.any(np.isnan(loaded)) or np.any(np.isinf(loaded)):
@@ -253,22 +210,6 @@ def make_save_next_temp_file(input_list: list,
         for item in data:
             print(item.shape)
         raise Exception
-
-
-def get_file_shapely_box(file_dir: Path, file_name: str = 'sentinel.tif') -> shapely.Polygon:
-    file_path = file_dir / file_name
-    with rio.open(file_path) as rio_f:
-        bounds = rio_f.bounds
-    return shapely.box(*bounds)
-
-
-def get_file_info_dict(file):
-    bbox = get_file_shapely_box(file)
-    file_dict = {
-        'file': file,
-        'bbox': bbox
-    }
-    return file_dict
 
 
 class InputListGenerator:
@@ -317,16 +258,14 @@ class TestListGenerator:
                  data_loader: SenElBurnedLoader,
                  base_path: Path,
                  temp_dir: Path,
-                 temp_cut_dir: Path,
                  **kwargs):
         self.data_loader = data_loader
         self.temp_dir = temp_dir
-        self.temp_cut_dir = temp_cut_dir
         self.base_path = base_path
 
 
     def make_input_info(self):
-        input_data_dir = self.base_path / 'test_data'
+        input_data_dir = self.base_path / 'val_data'
         sub_dir_list = list(input_data_dir.glob('*'))
         num = len(sub_dir_list)
         file_names = []
@@ -337,8 +276,7 @@ class TestListGenerator:
 
     def make_temp_files(self, test_files):
         make_save_next_temp_file(
-            test_files, data_loader=self.data_loader, temp_dir=self.temp_dir,
-            temp_cut_dir=self.temp_cut_dir, temp_name='test_input.npy'
+            test_files, data_loader=self.data_loader, temp_dir=self.temp_dir, temp_name='test_input.npy'
         )
 
     def make_test_list(self, num_test_inds: int) -> (list, list):
@@ -350,7 +288,7 @@ class TestListGenerator:
 
 
 
-class WaterwayDataLoaderV3:
+class WaterwayDataLoader:
     def __init__(self,
                  num_test_inds: int = 1000,
                  num_training_images_per_load: int = 2500,
@@ -363,17 +301,14 @@ class WaterwayDataLoaderV3:
 
         self.base_path = Path(base_path)
         self.temp_dir = self.base_path / 'temp'
-        self.temp_cut_dir = self.base_path/'temp_cut'
         if not self.temp_dir.exists():
             self.temp_dir.mkdir()
-        if not self.temp_cut_dir.exists():
-            self.temp_cut_dir.mkdir()
         self.test_data = None
         self.num_training_images = num_training_images_per_load
         self.temp_process = None
         self.data_loader = data_loader
         self.test_list_generator = TestListGenerator(
-            data_loader=self.data_loader, temp_cut_dir=self.temp_cut_dir,
+            data_loader=self.data_loader,
             temp_dir=self.temp_dir, base_path=base_path
         )
         if not _from_load:
@@ -392,7 +327,6 @@ class WaterwayDataLoaderV3:
 
     def clear_temp_dir(self):
         delete_directory_contents(self.temp_dir)
-        delete_directory_contents(self.temp_cut_dir)
 
     def make_next_temp_file(self, num_images: int = None):
         if num_images is None:
@@ -401,7 +335,6 @@ class WaterwayDataLoaderV3:
             'input_list': self.make_next_input_list(num_images),
             'data_loader': self.data_loader,
             'temp_dir': self.temp_dir,
-            'temp_cut_dir': self.temp_cut_dir,
         }
         self.temp_process = Process(target=make_save_next_temp_file, kwargs=kwargs)
         self.temp_process.start()
@@ -457,8 +390,8 @@ class WaterwayDataLoaderV3:
             save_pickle(training_path, self.input_list)
             save_pickle(testing_path, self.test_list)
             self.test_list = None
-        info_path = save_dir / 'training_info.yml'
-        data_loader_path = save_dir / 'data_loader_info.yml'
+        info_path = save_dir / 'training_info.yaml'
+        data_loader_path = save_dir / 'data_loader_info.yaml'
         save_yaml(info_path, info)
         self.data_loader.save(data_loader_path)
 
@@ -472,21 +405,20 @@ class WaterwayDataLoaderV3:
              data_loader=None,
              clear_temp=False):
         load_dir = base_dir / f'model_{model_number}/data_info'
-        info = open_yaml(load_dir / 'training_info.yml')
+        info = open_yaml(load_dir / 'training_info.yaml')
         if data_loader is None:
             data_loader_module, data_loader_class = info['data_loader_module_class']
             data_loader = getattr(
                 importlib.import_module(data_loader_module), data_loader_class
             )
-            info['data_loader'] = data_loader.load(load_dir / 'data_loader_info.yml')
+            info['data_loader'] = data_loader.load(load_dir / 'data_loader_info.yaml')
         else:
             info['data_loader'] = data_loader
         if num_training_images is not None:
             info['num_training_images_per_load'] = num_training_images
         input_list = open_pickle(load_dir / 'training_data.pkl')
         test_list = open_pickle(load_dir / 'testing_data.pkl')
-        ww_data_loader = WaterwayDataLoaderV3(_from_load=True, **info)
-        delete_directory_contents(ww_data_loader.temp_cut_dir)
+        ww_data_loader = WaterwayDataLoader(_from_load=True, **info)
         ww_data_loader.epoch = info['epoch'] if epoch is None else epoch
         ww_data_loader.current_index = info['current_index'] \
             if current_index is None else current_index

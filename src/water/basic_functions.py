@@ -5,7 +5,6 @@ import pandas as pd
 import geopandas as gpd
 from time import perf_counter as tt
 from time import sleep
-import sys
 from pathlib import Path
 import datetime as dt
 import pickle as pkl
@@ -15,9 +14,7 @@ import numpy as np
 from shutil import rmtree
 import shapely
 from rasterio import CRS as rio_crs
-import rioxarray as rxr
-import xarray as xr
-from pyproj import CRS as pyproj_crs, Geod
+from pyproj import CRS as pyproj_crs
 from shapely.geometry import (Polygon, MultiPolygon, Point, MultiPoint,
                               LineString, MultiLineString, LinearRing)
 from typing import Union, Tuple, Iterable, Callable
@@ -53,206 +50,13 @@ def open_yaml(file_name: pathlike):
         obj = yaml.safe_load(file)
     return obj
 
-class CountryCodeException(Exception):
-    @staticmethod
-    def no_info(country_name):
-        return f'I have no information on {country_name}'
-    
-    @staticmethod
-    def not_unique(country_name, possible_names):
-        return_str = f'{country_name} is not unique, found the following:\n'
-        return_str += f'  name: alpha_2_code\n'
-        for n in range(len(possible_names)):
-            name = possible_names.loc[n, 'country_name']
-            code = possible_names.loc[n, 'alpha_2_code']
-            return_str += f'  {name}: {code}\n'
-        return return_str
-
-
-def get_country_bbox_from_alpha_2_code(alpha_2_code: str
-                                       ) -> bboxtype:
-    """
-    returns the bounding box for the country with the entered alpha_2_code
-    Parameters
-    ----------
-    alpha_2_code - str
-
-    Returns
-    -------
-    (min_lon, min_lat, max_lon, max_lat) - (float, float, float, float)
-    """
-    file_path = ppaths.country_lookup_data/'country_information.parquet'
-    df = pd.read_parquet(file_path)
-    alpha_2_code = alpha_2_code.lower()
-    country_bounding_box = df.loc[alpha_2_code, 'boundingBox']
-    min_lon = country_bounding_box['sw']['lon']
-    min_lat = country_bounding_box['sw']['lat']
-    max_lon = country_bounding_box['ne']['lon']
-    max_lat = country_bounding_box['ne']['lat']
-    return min_lon, min_lat, max_lon, max_lat
-
-
-def get_alpha_2_code_from_country_name(country_name: str
-                                       ) -> str:
-    """
-    returns the corresponding alpha 2 code for the entered country_name
-    Parameters
-    ----------
-    country_name - str
-
-    Returns
-    -------
-    alpha_2_code
-    """
-    # codes = pd.read_csv(ppaths.country_lookup_data/'country_codes.csv', delimiter='\t')
-    codes = pd.read_parquet(ppaths.country_lookup_data/'country_information.parquet')
-
-    codes.country_name = codes.country_name.str.lower()
-    country_name = country_name.lower().replace(' ', '_')
-    country_codes = codes[codes.country_name == country_name].reset_index(drop=True)
-    if len(country_codes) == 0:
-        country_codes = codes[codes.country_name.str.contains(country_name)].reset_index(drop=True)
-    if len(country_codes) == 1:
-        return country_codes.loc[0, 'alpha_2_code']
-    elif len(country_codes) == 0:
-        raise CountryCodeException(CountryCodeException.no_info(country_name))
-    else:
-        raise CountryCodeException(CountryCodeException.not_unique(country_name, country_codes))
-
-
-def get_alpha_3_code_from_country_name(country_name: str
-                                       ) -> str:
-    """
-    returns the corresponding alpha 2 code for the entered country_name
-    Parameters
-    ----------
-    country_name - str
-
-    Returns
-    -------
-    alpha_2_code
-    """
-
-    # codes = pd.read_csv(ppaths.country_lookup_data/'country_codes.csv', delimiter='\t')
-    codes = pd.read_parquet(ppaths.country_lookup_data/'country_information.parquet')
-    codes.country_name = codes.country_name.str.lower()
-    country_name = country_name.lower().replace(' ', '_')
-    country_codes = codes[codes.country_name == country_name].reset_index(drop=True)
-    if len(country_codes) == 0:
-        country_codes = codes[codes.country_name.str.contains(country_name)].reset_index(drop=True)
-    if len(country_codes) == 1:
-        return country_codes.loc[0, 'alpha_3_code']
-    elif len(country_codes) == 0:
-        raise CountryCodeException(CountryCodeException.no_info(country_name))
-    else:
-        raise CountryCodeException(CountryCodeException.not_unique(country_name, country_codes))
-
-
-def get_alpha_2_code_from_alpha_3_code(alpha_3_code: str) -> str:
-    """
-    returns the corresponding alpha 2 code for the entered alpha 3 code
-    Parameters
-    ----------
-    alpha_3_code- str
-
-    Returns
-    -------
-    alpha_2_code
-    """
-    codes = pd.read_csv(ppaths.country_lookup_data/'country_codes.csv')
-    codes.alpha_3_code = codes.alpha_3_code.str.lower()
-    alpha_3_code = alpha_3_code.lower()
-    country_codes = codes[codes.alpha_3_code.str.contains(alpha_3_code)].reset_index(drop=True)
-    if len(country_codes) == 1:
-        return country_codes.loc[0, 'alpha_3_code']
-    elif len(country_codes) == 0:
-        raise CountryCodeException(CountryCodeException.no_info(alpha_3_code))
-    else:
-        raise CountryCodeException(CountryCodeException.not_unique(alpha_3_code, country_codes))
-
-
-def open_gdf(file_path: Path):
-    if 'parquet' in file_path.suffix.lower():
-        return gpd.read_parquet(path=file_path)
-    else:
-        return gpd.read_file(file_path)
-
-
-def get_multipolygon_max_polygon(multipolygon: shapely.MultiPolygon or shapely.Polygon):
-    max_area = 0
-    polygon = multipolygon
-    if hasattr(multipolygon, 'geoms'):
-        polygon_geoms = list(multipolygon.geoms)
-        for geom in polygon_geoms:
-            if geom.area > max_area:
-                polygon = geom
-                max_area = geom.area
-    return polygon
-
-
-def get_polygons_by_alpha3(alpha_3_code: str, only_mainland: bool=True):
-    gdf = gpd.read_parquet(ppaths.country_lookup_data/'world_boundaries.parquet')
-    polygon = gdf[gdf.iso3 == alpha_3_code.upper()].reset_index(drop=True)['geometry'][0]
-    if only_mainland:
-        polygon = get_multipolygon_max_polygon(polygon)
-    return polygon
-
-
-def get_country_polygon(country, only_mainland=False):
-    alpha3 = get_alpha_3_code_from_country_name(country)
-    return get_polygons_by_alpha3(alpha3, only_mainland)
-
-
-def get_country_bridges(country):
-    country_polygon = get_country_polygon(country)
-    bridges = gpd.read_parquet(ppaths.evaluation_data/'bridge_locations.parquet')
-    bridges = bridges[bridges.intersects(country_polygon)].reset_index(drop=True)
-    return bridges
-
-def get_country_bounding_box(country_name: str=None,
-                             alpha_2_code: str=None,
-                             alpha_3_code: str=None
-                             ) -> bboxtype:
-    """
-    returns country bounding box, only requires one of country_name, alpha_2_code, or alpha_3_code.
-    If country_name or alpha_3_code are entered,
-    then they will first be converted to the country's alpha_2_code.
-
-    Parameters
-    ----------
-    country_name - str
-    alpha_2_code - str
-    alpha_3_code - str
-
-    Returns
-    -------
-
-    """
-    try:
-        if alpha_2_code is not None:
-            min_lon, min_lat, max_lon, max_lat = get_country_bbox_from_alpha_2_code(alpha_2_code)
-        else:
-            if country_name is not None:
-                alpha_2_code = get_alpha_2_code_from_country_name(country_name)
-            elif alpha_3_code is not None:
-                alpha_2_code = get_alpha_2_code_from_alpha_3_code(alpha_3_code)
-            else:
-                raise Exception(
-                        print('One of country_name, alpha_2_code, or alpha_3_code must have an input')
-                )
-            min_lon, min_lat, max_lon, max_lat = get_country_bbox_from_alpha_2_code(alpha_2_code)
-    except KeyError:
-        polygon = get_country_polygon(country=country_name)
-        min_lon, min_lat, max_lon, max_lat = polygon.bounds
-    return min_lon - .005, min_lat - .005, max_lon + .005, max_lat + .005
-
 
 def check_hu4_exists(hu4_index: int):
     return (ppaths.training_data/f'hu4_hull/hu4_{hu4_index:04d}.parquet').exists()
 
 
 def get_hu4_hull_gdf(hu4_index: int):
-    gdf = gpd.read_parquet(ppaths.training_data/f'hu4_hull/hu4_{hu4_index:04d}.parquet')
+    gdf = gpd.read_parquet(ppaths.hu4_hull/f'hu4_{hu4_index:04d}.parquet')
     return gdf
 
 
@@ -261,8 +65,9 @@ def get_hu4_hull_polygon(hu4_index: int):
     polygon = gdf.loc[0, 'geometry']
     return polygon
 
+
 def get_hu4_gdf(hu4_index: int):
-    gdf = gpd.read_parquet(ppaths.training_data/f'hu4_parquet/hu4_{hu4_index:04d}.parquet')
+    gdf = gpd.read_parquet(ppaths.hu4_parquet/f'hu4_{hu4_index:04d}.parquet')
     return gdf
 
 
@@ -287,19 +92,6 @@ def save_json(file_name: pathlike,
 def open_json(file_name: pathlike):
     with open(f'{file_name}', 'r') as file:
         obj = json.load(file)
-    return obj
-
-
-def save_yaml(file_name: pathlike,
-              obj
-              ) -> None:
-    with open(f'{file_name}', 'w') as file:
-        yaml.dump(obj, file)
-
-
-def open_yaml(file_name: pathlike):
-    with open(f'{file_name}', 'r') as file:
-        obj = yaml.load(file, yaml.Loader)
     return obj
 
 
@@ -499,196 +291,6 @@ def printdf(df: dflike,
             print(df[cols].iloc[start_index:].head(head).to_string())
         else:
             print(df[cols].iloc[start_index:].tail(head).to_string())
-
-
-def get_bbox_x_meter_resolution(resolution_in_meters,
-                                x_min=None,
-                                y_min=None,
-                                x_max=None,
-                                y_max=None,
-                                bbox=None):
-    """
-    Finds an approximation of the entered resolution_in_meters in
-    degrees (wgs84) using the middle latitude value.
-
-    Parameters
-    ----------
-    bbox
-    resolution_in_meters
-
-    Returns
-    -------
-    resolution in degrees
-    """
-    if bbox is not None:
-        x_min, y_min, x_max, y_max = bbox
-    if y_min is None:
-        raise Exception('Either y_min, y_max must be entered or the bounding box must be entered')
-    if x_min is None:
-        x_min = 0
-    avg_lat = (y_max + y_min) / 2
-    geod = Geod(ellps='WGS84')
-    _, lat1, _ = geod.fwd(lons=[x_min], lats=[avg_lat], az=0, dist=resolution_in_meters)
-    resolution = abs(lat1[0] - avg_lat)
-    return resolution
-
-
-def coordinates_to_row_col(x: numeric,
-                           y: numeric,
-                           x_min: numeric,
-                           y_max: numeric,
-                           resolution: numeric=None,
-                           x_resolution: float=None,
-                           y_resolution: float=None
-                           ) -> (int, int):
-    """
-    Finds the row, col of the grid cell that (x, y) falls in.
-
-    Parameters
-    ----------
-    x: The x-coordinate to be found.
-    y: The y-coordinate to be found.
-    x_min: The minimum x-value (ie the west coordinate of the grid's bounding box)
-    y_max: The maximum y-value (ie the north coordinate of the grid's bounding box)
-    resolution: The resolution of the grid
-
-    Returns
-    -------
-    row, col: the row and column of the grid cell.
-    """
-    if resolution is not None:
-        col = int(np.floor((x - x_min) / resolution))
-        row = int(np.floor((y_max - y) / resolution))
-    elif x_resolution is not None and y_resolution is not None:
-        col = int(np.floor((x - x_min) / x_resolution))
-        row = int(np.floor((y_max - y) / y_resolution))
-    else:
-        raise Exception('Either resolution or x_resolution and y_resolution must not be None')
-    return row, col
-
-
-def coordinate_list_to_row_col_array(coordinate_list: list,
-                                     x_min: float,
-                                     y_max: float,
-                                     resolution: float=None,
-                                     x_resolution: float=None,
-                                     y_resolution: float=None
-                                     ) -> np.ndarray:
-    """
-    Finds the row, col for each of the (x, y) coordinates in coordinate_list.
-    Returns these row, col pairs in a np.ndarray.
-
-    Parameters
-    ----------
-    coordinate_list: The (x,y)-coordinates to be found.
-    x_min: The minimum x-value (ie the west coordinate of the grid's bounding box)
-    y_max: The maximum y-value (ie the north coordinate of the grid's bounding box)
-    resolution: The resolution of the grid
-
-    Returns
-    -------
-    row_col_array: The corresponding row, col values in a np.ndarray.
-    """
-    coordinate_array = np.array(coordinate_list, dtype=float)
-    x = coordinate_array[:, 0]
-    y = coordinate_array[:, 1]
-    row_col_array = np.zeros(coordinate_array.shape)
-    if resolution is not None:
-        row_col_array[:, 0] = np.floor((y_max - y) / resolution)
-        row_col_array[:, 1] = np.floor((x - x_min) / resolution)
-    elif x_resolution is not None and y_resolution is not None:
-        row_col_array[:, 0] = np.floor((y_max - y) / y_resolution)
-        row_col_array[:, 1] = np.floor((x - x_min) / x_resolution)
-    else:
-        raise Exception('Either resolution or x_resolution and y_resolution must not be None')
-    row_col_array = row_col_array.astype(int)
-    return row_col_array
-
-
-def row_col_array_to_midpoint_coordinates(row_col_array: Iterable[Iterable[int]],
-                                          x_min: numeric,
-                                          y_max: numeric,
-                                          resolution: numeric = None,
-                                          x_resolution: numeric = None,
-                                          y_resolution: numeric = None
-                                          )-> np.array:
-    """
-    Finds coordinates of the midpoints for (row,col) values in row_col_list
-    """
-    if type(row_col_array) != np.ndarray:
-        row_col_array = np.array(row_col_array)
-    x_y_array = np.zeros(row_col_array.shape)
-    if x_resolution is not None:
-        if y_resolution < 0:
-            y_resolution = -y_resolution
-        x_y_array[:, 0] = x_min + x_resolution*(row_col_array[:, 1] + .5)
-        x_y_array[:, 1] = y_max - y_resolution*(row_col_array[:, 0] + .5)
-    else:
-        x_y_array[:, 0] = x_min + resolution*(row_col_array[:, 1] + .5)
-        x_y_array[:, 1] = y_max - resolution*(row_col_array[:, 0] + .5)
-    return x_y_array
-
-
-def row_col_bbox_to_xy_bbox(rc_bbox, x_min, y_max, x_resolution, y_resolution):
-    y_resolution = np.abs(y_resolution)
-    cm, rm, cM, rM = rc_bbox
-    bbox_x_min = x_min + x_resolution*cm
-    bbox_y_min = y_max - y_resolution*rM
-    bbox_x_max = x_min + x_resolution*cM
-    bbox_y_max = y_max - y_resolution*rm
-    return bbox_x_min, bbox_y_min, bbox_x_max, bbox_y_max
-
-def make_elevation_file_array_and_file_paths(
-        elevation_dir: Path = ppaths.evaluation_data/'elevation'
-) -> ('np.array', list):
-    elevations_files = list(elevation_dir.glob('*.tif'))
-    elevation_array = np.zeros((len(elevations_files), 4))
-    for ind, file in enumerate(elevations_files):
-        name = file.name
-        split = name.split('elevation_')[-1].split('.tif')[0].split('_')
-        for i, val in enumerate(split):
-            elevation_array[ind, i] = float(val)
-    return elevation_array, elevations_files
-
-
-def split_coordinates_by_elevation_file(coordinate_array: 'np.array',
-                                        elevation_array: 'np.array'
-                                        ) -> dict:
-    split_coordinate_index_lists = {}
-    for ind, (x_min, y_min, x_max, y_max) in enumerate(elevation_array):
-        indices = np.where((x_min <= coordinate_array[:, 0])
-                           & (coordinate_array[:, 0] < x_max)
-                           & (y_min <= coordinate_array[:, 1])
-                           & (coordinate_array[:, 1] < y_max))[0]
-        if len(indices) > 0:
-            split_coordinate_index_lists[ind] = indices
-    return split_coordinate_index_lists
-
-
-def get_elevation_from_file(coordinate_array: 'np.array',
-                            elevation_file: Path
-                            ) -> 'np.array':
-    with rxr.open_rasterio(elevation_file) as rio_f:
-        x = xr.DataArray(coordinate_array[:, 0], dims='points')
-        y = xr.DataArray(coordinate_array[:, 1], dims='points')
-        elevations = rio_f[0].sel(x=x, y=y, method='nearest').values.astype(float)
-    return elevations
-
-
-def coordinate_elevation_lookup(coordinate_list: list,
-                                elevation_dir: Path = ppaths.evaluation_data/'elevation',
-                                ) -> 'np.array':
-    coordinate_array = np.array(coordinate_list)
-    to_return = np.zeros(len(coordinate_list))
-    elevation_array, elevation_paths = make_elevation_file_array_and_file_paths(elevation_dir)
-    coordinate_index_lists = split_coordinates_by_elevation_file(
-        coordinate_array=coordinate_array, elevation_array=elevation_array
-    )
-    for index in coordinate_index_lists:
-        indices = coordinate_index_lists[index]
-        file_path = elevation_paths[index]
-        to_return[indices] = get_elevation_from_file(coordinate_array[indices], file_path)
-    return to_return
 
 
 def extract_all_from_file(file_path: Path,

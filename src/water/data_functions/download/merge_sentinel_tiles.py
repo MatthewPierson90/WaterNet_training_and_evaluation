@@ -118,6 +118,17 @@ def merge_and_save(base_path: Path, save_dir: Path, num_steps=0):
     )
 
 
+def merge_and_save_multi(base_dir: Path, save_dir: Path, num_proc: int, num_steps: int):
+    inputs = [
+        dict(base_path=base_path, save_dir=save_dir, num_steps=num_steps)
+        for base_path in list(base_dir.iterdir())
+        if len(get_file_list(base_path)[0]) > 0 and not (save_dir/f'{base_path.name}.tif').exists()
+    ]
+    print(len(inputs))
+    if not save_dir.exists():
+        save_dir.mkdir()
+    SharedMemoryPool(func=merge_and_save, input_list=inputs, use_kwargs=True, num_proc=num_proc).run()
+
 def merge_save_and_remove(base_path: Path, save_dir: Path, num_steps=0):
     """
     Merge, save, and delete downloaded sentinel tiles. The goal is to obtain mostly cloud free images. num_steps

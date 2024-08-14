@@ -2,7 +2,7 @@ import os
 import pandas as pd
 import torch
 from water.training.model_container import ModelTrainingContainer
-from water.data_functions.load.load_waterway_data import SenElBurnedLoaderEval
+from water.data_functions.load.load_waterway_data import SenElBurnedLoader
 from water.loss_functions.loss_functions import WaterwayLossDecForEval
 import numpy as np
 import rasterio as rio
@@ -10,8 +10,6 @@ from water.basic_functions import SharedMemoryPool, tt, time_elapsed, delete_dir
 from water.paths import ppaths, Path
 from rasterio.transform import from_bounds
 from multiprocessing import Process
-from water.data_functions.load.cut_data import cut_data_to_match_file_list
-import shutil
 
 
 def get_input_files(
@@ -33,7 +31,7 @@ def get_input_files(
     return files
 
 
-def check_input(file: Path, data_loader: SenElBurnedLoaderEval, side_len: int = None):
+def check_input(file: Path, data_loader: SenElBurnedLoader, side_len: int = None):
     data = data_loader.open_data(file)
     if np.any(np.isnan(data)) or np.any(np.isinf(data)):
         print(file)
@@ -49,13 +47,14 @@ def check_input(file: Path, data_loader: SenElBurnedLoaderEval, side_len: int = 
             if len(list(file.parent.glob('*'))) == 0:
                 os.rmdir(file.parent)
 
-def check_input_list(files: list, data_loader: SenElBurnedLoaderEval, side_len: int):
+
+def check_input_list(files: list, data_loader: SenElBurnedLoader, side_len: int):
     for file in files:
         check_input(file, data_loader, side_len=side_len)
 
 
 def clean_inputs(
-        data_loader: SenElBurnedLoaderEval,
+        data_loader: SenElBurnedLoader,
         num_proc: int = 15, base_dir: Path = ppaths.training_data/'model_inputs_224',
         side_len: int = None,
 ):
@@ -119,40 +118,12 @@ def evaluate_model_on_single_image(
     return output_cpu
 
 
-def copy_burned_files(file_paths, dst_dir):
-    for file_path in file_paths:
-        save_dir = dst_dir/file_path.name
-        if not save_dir.exists():
-            save_dir.mkdir()
-        shutil.copytree(file_path, save_dir, dirs_exist_ok=True)
-
-
-def mk_dirs(file_paths, dst_dir):
-    for file_path in file_paths:
-        save_dir = dst_dir/file_path.name
-        if not save_dir.exists():
-            save_dir.mkdir()
-
-
-def cut_next_file_set(file_paths, base_dir_path, num_proc=15):
-    delete_directory_contents(base_dir_path)
-    mk_dirs(file_paths, base_dir_path)
-    cut_data_to_match_file_list(
-        data_dir=ppaths.training_data/'elevation_cut', file_paths=file_paths, base_dir_path=base_dir_path, num_proc=num_proc
-    )
-
-
 def make_save_next_temp_file(input_list: list,
-                             data_loader: SenElBurnedLoaderEval,
+                             data_loader: SenElBurnedLoader,
                              temp_dir: Path,
-                             temp_cut_dir: Path,
-                             num_proc: int=15,
                              temp_name: str='next_input.npy'
                              ):
     data = []
-    s = tt()
-    cut_next_file_set(file_paths=input_list, base_dir_path=temp_cut_dir, num_proc=num_proc)
-    # load_file_paths = temp_cut_dir
     for file_path in input_list:
         loaded = data_loader.open_data(file_path)
         if np.any(np.isnan(loaded)) or np.any(np.isinf(loaded)):
@@ -176,17 +147,16 @@ def time_delta(s):
 
 
 def evaluate_on_all_sen_data_multi(
-        model_number: int, evaluation_dir: Path = ppaths.training_data/'model_inputs_224',
+        model_number: int, evaluation_dir: Path = ppaths.model_inputs_832,
         num_per_load: int = 1650, max_per_it: int = 550, max_target: int = 21, num_y=1,
-        data_loader: SenElBurnedLoaderEval = None, is_terminal=True, input_dir_name='input_data',
+        data_loader: SenElBurnedLoader = None, is_terminal=True, input_dir_name='input_data',
         output_dir_name='output_data', stats_name='evaluation_stats', loss_func_type=WaterwayLossDecForEval
 ):
     temp_dir: Path = evaluation_dir/'temp'
-    temp_cut_dir = evaluation_dir/'temp_cut'
     save_dir_path = evaluation_dir/f'{output_dir_name}_{model_number}'
     save_stats_path = evaluation_dir/f'{stats_name}_{model_number}.parquet'
     if data_loader is None:
-        data_loader = SenElBurnedLoaderEval(el_base=temp_cut_dir)
+        data_loader = SenElBurnedLoader()
     if not temp_dir.exists():
         temp_dir.mkdir()
     delete_directory_contents(temp_dir)
@@ -212,7 +182,7 @@ def evaluate_on_all_sen_data_multi(
         num_files = len(files)
         file_inputs = files[:num_per_load]
         make_save_next_temp_file(
-                input_list=file_inputs, temp_dir=temp_dir, data_loader=data_loader, temp_cut_dir=temp_cut_dir
+                input_list=file_inputs, temp_dir=temp_dir, data_loader=data_loader
         )
         file_ind = num_per_load
         # s = tt()
@@ -231,8 +201,7 @@ def evaluate_on_all_sen_data_multi(
             file_inputs = files[file_ind:file_ind + num_per_load]
             file_ind += num_per_load
             kwargs = {
-                'input_list': file_inputs, 'data_loader': data_loader,
-                'temp_dir': temp_dir, 'temp_cut_dir':  temp_cut_dir
+                'input_list': file_inputs, 'data_loader': data_loader, 'temp_dir': temp_dir
             }
             temp_process = Process(target=make_save_next_temp_file, kwargs=kwargs)
             temp_process.start()

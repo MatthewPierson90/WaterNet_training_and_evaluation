@@ -9,7 +9,7 @@ from water.paths import ppaths
 
 def open_hu4_data(index:int,
                   only_linestrings=False):
-    waterway_path = ppaths.training_data/f'hu4_parquet/hu4_{index:04d}.parquet'
+    waterway_path = ppaths.hu4_parquet/f'hu4_{index:04d}.parquet'
     if waterway_path.exists():
         gdf = gpd.read_parquet(waterway_path)
         if only_linestrings:
@@ -73,7 +73,6 @@ def burn_waterway_raster(raster_path,
                          dst_profile,
                          out_shape,
                          transform,
-                         save_dir_name='waterways_burned',
                          ):
     image = burn_to_raster_loop(
         water_gdf=water_in_box, out_shape=out_shape, init_buffer=0.00005, transform=transform,
@@ -82,12 +81,7 @@ def burn_waterway_raster(raster_path,
     dst_profile['count'] = 1
     dst_profile['dtype'] = np.uint8
     dst_profile['nodata'] = None
-    burned_dir = ppaths.training_data/save_dir_name
-    if not burned_dir.exists():
-        burned_dir.mkdir()
-    save_dir = burned_dir
-    if not save_dir.exists():
-        save_dir.mkdir()
+    save_dir = ppaths.waterways_burned
     save_path = save_dir/raster_path.name
     if save_path.exists():
         with rio.open(save_path) as src_f:
@@ -160,10 +154,9 @@ def make_bbox(file_name):
     return bbox
 
 
-def do_files(files: list,
-             water: gpd.GeoDataFrame,
-             ww_shape: shapely.Polygon,
-             save_dir_name='waterways_burned'):
+def do_files(
+        files: list, water: gpd.GeoDataFrame, ww_shape: shapely.Polygon
+):
     count = 0
     for file in files:
         box = make_bbox(file.name)
@@ -176,24 +169,20 @@ def do_files(files: list,
                 e, s, w, n = src_f.bounds
             water_in_box = get_waterways_in_bbox((e, s, w, n), water)
             burn_waterway_raster(
-                    file, water_in_box=water_in_box, save_dir_name=save_dir_name,
-                    dst_profile=dst_profile, out_shape=out_shape, transform=transform
+                    file, water_in_box=water_in_box, dst_profile=dst_profile, out_shape=out_shape, transform=transform
             )
 
 
 def do_all_for_ind(ww_ind, num_proc, files):
-    hu4_file = ppaths.training_data/f'hu4_parquet/hu4_{ww_ind:04d}.parquet'
-    hull_file = ppaths.training_data/f'hu4_hull/hu4_{ww_ind:04d}.parquet'
+    hu4_file = ppaths.hu4_parquet/f'hu4_{ww_ind:04d}.parquet'
+    hull_file = ppaths.hu4_hull/f'hu4_{ww_ind:04d}.parquet'
     if hu4_file.exists() and hull_file.exists():
         print(f'Working on {ww_ind}')
         water = get_hu4_waterways(ww_ind)
-        crs = water.crs
         np.random.shuffle(files)
         num_files = len(files)
-        # num_steps = num_proc*5
         num_steps = num_proc
         step_size = num_files//(num_steps)
-
         ww_shape = gpd.read_parquet(hull_file).geometry[0]
         input_list = [
             {'files': files[i*step_size:(i + 1)*step_size],
@@ -205,42 +194,10 @@ def do_all_for_ind(ww_ind, num_proc, files):
         ).run()
 
 
-def do_multiple_inds(inds_to_do, num_proc, init_dir='sentinel', exclude_test_val=True):
-    if not (ppaths.training_data/'waterways_burned').exists():
-        (ppaths.training_data/'waterways_burned').mkdir()
-    # files = list((ppaths.training_data / init_dir).glob('*'))
+def do_multiple_inds(inds_to_do, num_proc):
     files = [
-        file for file in (ppaths.training_data/init_dir).iterdir()
-        if not (ppaths.training_data/f'waterways_burned/{file.name}').exists()
+        file for file in (ppaths.sentinel_cut).iterdir()
+        if not (ppaths.waterways_burned/f'{file.name}').exists()
     ]
-    print(len(files))
-    # print(len(files))
-    # if exclude_test_val:
-    #     test_names = get_test_file_names()
-    #     val_names = get_val_file_names()
-    #     used_names = test_names + val_names
-    #     used_names = set([f'{name}.tif' for name in used_names])
-    #     files = [file for file in files if file.name in used_names]
-    # files.sort(key=lambda x: x.name)
-    # for file in files:
-    #     print(file)
     for ind in inds_to_do:
         do_all_for_ind(ind, num_proc, files=files)
-
-if __name__ == '__main__':
-    from pprint import pprint
-    # water_types = set()
-    # for ww_ind in range(101, 1900):
-        # hu4_file = ppaths.training_data / f'hu4_parquet/hu4_{ww_ind:04d}.parquet'
-    #     hull_file = ppaths.training_data / f'hu4_hull/hu4_{ww_ind:04d}.parquet'
-    #     if hu4_file.exists() and hull_file.exists():
-    #         print(f'opening ww ind {ww_ind}')
-    #         water = get_hu4_waterways(ww_ind)
-    #         water_types.update(water.fcode_description.unique())
-    # water_types = list(water_types)
-    # water_types.sort()
-    # for item in water_types:
-    #     print(item)
-    # pprint(water_types)
-    do_multiple_inds(range(101, 1900), 25)
-

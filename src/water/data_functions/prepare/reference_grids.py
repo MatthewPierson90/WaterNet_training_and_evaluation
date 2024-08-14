@@ -40,7 +40,7 @@ def make_grids_for_fixed_lats(
             )
 
 
-def make_grids(
+def make_reference_grids(
         save_dir, polygon, grid_width=2560, step_size=1280,
         grid_res=10, crs=rio.CRS.from_epsg(4326), **kwargs
 ):
@@ -79,4 +79,3 @@ def make_grids(
             min_lat=min_lat, max_lat=max_lat, west=w, east=e, polygon=polygon,
             grid_width=grid_width, step_size=step_size, x_res=x_res, crs=crs, save_dir=save_dir
         )
-        # break

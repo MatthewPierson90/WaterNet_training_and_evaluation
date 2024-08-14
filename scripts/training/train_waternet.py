@@ -2,7 +2,7 @@ import torch
 from water.paths import ppaths
 from waternet.model import WaterwayModel
 from water.loss_functions.loss_functions import WaterwayLossDecTanimoto
-from water.data_functions.load.load_waterway_data import (WaterwayDataLoaderV3, SenElBurnedLoaderEval)
+from water.data_functions.load.load_waterway_data import WaterwayDataLoader, SenElBurnedLoader
 from water.training.batch_scheduler import BatchSizeScheduler
 from water.training.model_container import ModelTrainingContainer
 from water.training.training_loop_data_increase import train_model
@@ -68,7 +68,7 @@ if __name__ == '__main__':
     # model_container = ModelTrainingContainer.load_container(840, num_epochs=3, ckpt=7)
     # model_container.current_iteration = 8
     # model_container.model_container.schedule_dict['wwm'].required_iterations = 2
-    # data_loader = SenElBurnedLoaderEval(
+    # data_loader = SenElBurnedLoader(
     #     el_base=ppaths.training_data/'model_inputs_224/temp_cut', elevation_name='elevation_cut',
     #     value_dict=ww_value_dict
     # )
@@ -97,13 +97,10 @@ if __name__ == '__main__':
     model_container.model_container.schedule_dict['wwm'].step_size = 1
     model_container.model_container.schedule_dict['wwm'].max_iterations = 40
     model_container.set_lr(.01, model_name='wwm')
-    data_loader = SenElBurnedLoaderEval(
-        el_base=ppaths.training_data/'model_inputs_832/temp_cut', elevation_name='elevation_cut',
-        value_dict=ww_value_dict
-    )
-    data_load = WaterwayDataLoaderV3(
+    data_loader = SenElBurnedLoader(value_dict=ww_value_dict)
+    data_load = WaterwayDataLoader(
         num_training_images_per_load=200, num_test_inds=400, use_pruned_data=False,
-        base_path=ppaths.training_data/'model_inputs_832', data_loader=data_loader,
+        base_path=ppaths.model_inputs_832, data_loader=data_loader,
     )
     # data_load = WaterwayDataLoaderV3.load(
     #     842, data_loader=data_loader, clear_temp=False, current_index=14400

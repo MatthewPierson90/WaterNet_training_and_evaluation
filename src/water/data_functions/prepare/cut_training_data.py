@@ -253,35 +253,30 @@ def check_files(file_list, dirs_to_check):
     for file in file_list:
         for dir in dirs_to_check:
             if not (dir/file.name).exists():
-                break
+                continue
         else:
             new_list.append(file)
     return new_list
 
 
-def save_inputs_list_multi(
+def make_training_data_multi(
         parent_dirs: list,
         slice_width: int,
         save_dir_path: Path = ppaths.training_data/'model_inputs',
         dirs_to_check: list[Path] = (
-                ppaths.training_data/'elevation_cut', ppaths.training_data/'waterways_burned',
-                ppaths.training_data/'sentinel',
+                ppaths.elevation_cut, ppaths.sentinel_cut, ppaths.waterways_burned,
         ),
         num_proc=12,
         **kwargs
 ):
-    base_dir_path = save_dir_path
     save_dir_path = save_dir_path/'input_data'
     if not save_dir_path.exists():
         save_dir_path.mkdir(parents=True)
     base_dir = parent_dirs[0]
     input_list = []
     files = list(base_dir.glob('*'))
-    print(len(files))
     files = check_files(files, dirs_to_check=dirs_to_check)
-    print(len(files))
     files = [file for file in files]
-    print(len(files))
 
     np.random.shuffle(files)
     num_files = len(files)
@@ -297,102 +292,3 @@ def save_inputs_list_multi(
         inputs.update(**kwargs)
         input_list.append(inputs)
     SharedMemoryPool(func=slice_and_save_list_data, input_list=input_list, use_kwargs=True, num_proc=num_proc).run()
-
-if __name__ == '__main__':
-    # base_dir = ppaths.training_data/'model_inputs_832/input_data/'
-    # for sub_dir in base_dir.glob('*'):
-    #     for cut_dir in sub_dir.glob('*'):
-    #         with rio.open(cut_dir/'waterways_burned.tif') as rio_f:
-    #             w, s, e, n = rio_f.bounds
-    #         new_path = sub_dir/f'bbox_{w}_{s}_{e}_{n}'
-    #         cut_dir.rename(new_path)
-    # count = 0
-    # inputs_dir = ppaths.training_data/'model_inputs_224/input_data'
-    # inputs_dir = ppaths.training_data/'model_inputs_224/input_data'
-    # waterways_burned = ppaths.training_data/'waterways_burned'
-    # trails_burned = ppaths.training_data/'trails_burned'
-    # for file in (waterways_burned).iterdir():
-    #     # file_name = file.name.split('.tif')[0]
-    #     print(file.name)
-    #     break
-    #     if not (trails_burned/file.name).exists():
-    #         count += 1
-    #         with rio.open(file) as src:
-    #             shape = (1, src.height, src.width)
-    #             profile = src.profile
-    #         data = np.zeros(shape, dtype=np.uint8)
-    #         # print(shape, profile)
-    #         with rio.open(trails_burned/file.name, 'w', **profile) as dst:
-    #             dst.write(data)
-    # print(count)
-    pdirs = [
-        ppaths.training_data/'waterways_burned'
-    ]
-    # pdirs = [
-    #     ppaths.training_data/'trails_burned'
-    # ]
-    num_proc = 30
-    # # #
-    slicew = 832
-    step_size = 832
-    save_to = ppaths.training_data/'model_inputs_832'
-    save_inputs_list_multi(
-            save_dir_path=save_to, num_proc=num_proc,
-            parent_dirs=pdirs, slice_width=slicew,
-            row_step_size=step_size, col_step_size=step_size
-    )
-    # files = ppaths.training_data/'model_inputs_832/input_data'
-    # files = ppaths.training_data/'model_inputs_832/test_data'
-    # files = ppaths.training_data/'model_inputs_832/val_data'
-    #
-    # count = 0
-    from water.basic_functions import delete_directory_contents
-    # for subdir in files.iterdir():
-        # count += 1
-        # broke = False
-        # for subsubdir in subdir.iterdir():
-            # num_files = len(list(subsubdir.iterdir()))
-            # count += num_files
-            # if num_files != 3:
-                # delete_directory_contents(subsubdir)
-                # subsubdir.rmdir()
-                # count += 1
-                # print(subdir)
-                # print(subsubdir)
-                # broke = True
-                # break
-        # if broke:
-        #     break
-    # print(count)
-    pdirs = [
-        ppaths.training_data/'waterways_burned'
-    ]
-    num_proc = 30
-    #
-    slicew = 224
-    step_size = 224-22
-    save_to = ppaths.training_data/'model_inputs_224'
-    save_inputs_list_multi(
-            save_dir_path=save_to, num_proc=num_proc,
-            parent_dirs=pdirs, slice_width=slicew,
-            row_step_size=step_size, col_step_size=step_size
-    )
-
-
-
-    # slicew = 416
-    # step_size = 416
-    # save_to = ppaths.training_data/'model_inputs_416'
-    # save_inputs_list_multi(
-    #         save_dir_path=save_to, num_proc=num_proc,
-    #         parent_dirs=pdirs, slice_width=slicew,
-    #         row_step_size=step_size, col_step_size=step_size
-    # )
-    # # missing_values = [0, np.nan, np.inf, -np.inf]
-    # # for file in (ppaths.training_data/'sentinel1_vv_cut').glob('*'):
-    # #     with rio.open(file) as rio_f:
-    # #         data = rio_f.read()
-    # #         print(data.dtype)
-    # #         if np.any(np.isin(data, missing_values)):
-    # #             print('here')
-    # #             break

@@ -1,7 +1,6 @@
 import shapely
 
-from water.basic_functions import (get_country_bounding_box,
-                                   tt, time_elapsed, bboxtype, SharedMemoryPool)
+from water.basic_functions import tt, bboxtype, SharedMemoryPool
 from water.paths import ppaths
 import logging
 import pystac_client
@@ -55,7 +54,7 @@ def download_and_save_single_file(input_dict):
 
 
 def download_bbox_elevation_data(bbox: bboxtype,
-                                 save_dir: Path = ppaths.evaluation_data/'elevation',
+                                 save_dir: Path = ppaths.elevation_data,
                                  num_proc: int = 2,
                                  force_download: bool = False,
                                  print_progress: bool = True
@@ -64,83 +63,66 @@ def download_bbox_elevation_data(bbox: bboxtype,
     Downloads elevation data for the entered bbox, and saves the data to
     model_data/country/country_elevation/country_elevation_parts
     """
-    items = query_pc(bbox=bbox,
-                     collections=['cop-dem-glo-30'],
-                     datetime=None,
-                     max_items=10000)
-    print(len(items))
-    if not save_dir.exists():
-        save_dir.mkdir(parents=True)
-    s = tt()
-    input_dicts = [{'item': item,
-                    'save_name': 'elevation',
-                    'save_dir': save_dir,
-                    'force_download': force_download,
-                    'num_items': len(items),
-                    'start_time': s,
-                    'print_progress': print_progress
-                    } for item in items]
-    SharedMemoryPool(
-        num_proc=num_proc, input_list=input_dicts, func=download_and_save_single_file,
-        time_out=120, terminate_on_error=False
-    ).run()
-
-
-def download_bbox_list_elevation_data(bbox_list: list[bboxtype],
-                                 save_dir: Path = ppaths.evaluation_data/'elevation',
-                                 num_proc: int = 2,
-                                 force_download: bool = False,
-                                 print_progress: bool = True
-                                 ) -> None:
-    """
-    Downloads elevation data for the entered bbox, and saves the data to
-    model_data/country/country_elevation/country_elevation_parts
-    """
-    items = []
-    for bbox in bbox_list:
-        items.extend(
-            query_pc(bbox=bbox, collections=['cop-dem-glo-30'], datetime=None, max_items=10000)
-        )
-    print(len(items))
-    if not save_dir.exists():
-        save_dir.mkdir(parents=True)
-    s = tt()
-    input_dicts = [{'item': item,
-                    'save_name': 'elevation',
-                    'save_dir': save_dir,
-                    'force_download': force_download,
-                    'num_items': len(items),
-                    'start_time': s,
-                    'print_progress': print_progress
-                    } for item in items]
-    SharedMemoryPool(
-        num_proc=num_proc, input_list=input_dicts, func=download_and_save_single_file,
-        time_out=120, terminate_on_error=False
-    ).run()
-
-def download_country_elevation_data(country: str,
-                                    num_proc: int = 4,
-                                    print_progress: bool = True,
-                                    force_download: bool = False
-                                    ):
-    """
-    Downloads elevation data for the entered country and saves it to
-    model_data/country/country_elevation/country_elevation_parts.
-
-    Parameters
-    ----------
-    country
-    print_progress
-    """
-    bbox = get_country_bounding_box(country_name=country)
-    bbox = (max(bbox[0] - .15, -180), max(bbox[1] - .15, -90), min(bbox[2] + .15, 180), min(bbox[3] + .15, 90))
-    download_bbox_elevation_data(
-        bbox=bbox, num_proc=num_proc, force_download=force_download, print_progress=print_progress
+    items = query_pc(
+        bbox=bbox, collections=['cop-dem-glo-30'], datetime=None, max_items=10000
     )
+    print(len(items))
+    if not save_dir.exists():
+        save_dir.mkdir(parents=True)
+    s = tt()
+    input_dicts = [{'item': item,
+                    'save_name': 'elevation',
+                    'save_dir': save_dir,
+                    'force_download': force_download,
+                    'num_items': len(items),
+                    'start_time': s,
+                    'print_progress': print_progress
+                    } for item in items]
+    SharedMemoryPool(
+        num_proc=num_proc, input_list=input_dicts, func=download_and_save_single_file,
+        time_out=120, terminate_on_error=False
+    ).run()
+
+
+def download_bbox_list_elevation_data(
+        bbox_list: list[bboxtype], save_dir: Path = ppaths.elevation_data,
+        num_proc: int = 2, force_download: bool = False, print_progress: bool = True
+) -> None:
+    """
+    Downloads elevation data for the entered bbox, and saves the data to
+    model_data/country/country_elevation/country_elevation_parts
+    """
+    items = {}
+    for bbox in bbox_list:
+        new_items = {
+            item.id: item
+            for item in query_pc(bbox=bbox, collections=['cop-dem-glo-30'], datetime=None, max_items=10000)
+        }
+        items.update(new_items)
+    items = list(items.values())
+    if not save_dir.exists():
+        save_dir.mkdir(parents=True)
+    s = tt()
+    input_dicts = [{
+        'item': item, 'save_name': 'bbox', 'save_dir': save_dir, 'force_download': force_download,
+        'num_items': len(items), 'start_time': s, 'print_progress': print_progress
+    } for item in items]
+    SharedMemoryPool(
+        num_proc=num_proc, input_list=input_dicts, func=download_and_save_single_file,
+        time_out=120, terminate_on_error=False
+    ).run()
+
+
+if __name__ == '__main__':
+    bb_list = [
+        (-109.05919619986199,36.99275055519555,-102.04212644366443,41.00198213121131),
+        (-111.05843295392954,40.995109653686534,-104.05213107971079,45.006059349083486)
+    ]
+    its = download_bbox_list_elevation_data(bb_list)
 
 
 def download_polygon_list_elevation_data(
-        polygon_list: list[shapely.Polygon], num_proc: int = 4, save_dir: Path = ppaths.evaluation_data/'elevation',
+        polygon_list: list[shapely.Polygon], num_proc: int = 4, save_dir: Path = ppaths.elevation_data,
         print_progress: bool = True, force_download: bool = False
 ):
     bbox_list = [tuple(polygon.bounds) for polygon in polygon_list]
