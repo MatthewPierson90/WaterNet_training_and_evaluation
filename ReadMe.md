@@ -12,7 +12,7 @@ crashing the entire program.
 
 We ran these processes on a single machine with multiple drives. Most all of the data paths
 can be configured. To set custom drive locations, make a copy of
-[configuration_files/path_configuration_format.yaml](./configuration_files/path_configuration_format.yaml)
+[configuration_files/path_configuration_template.yaml](./configuration_files/path_configuration_template.yaml)
 titled "path_configuration.yaml" and saved in the configuration_files directory. Uncomment the directories you
 would like to change the path too, and add the absolute path to the new directory.
 
