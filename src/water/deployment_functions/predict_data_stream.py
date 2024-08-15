@@ -52,7 +52,7 @@ def evaluate_model_on_single_image(model_container: ModelTrainingContainer, data
 
 
 def cut_next_file_set(
-        file_paths, use_veg_indices, num_proc, polygon_dir, base_dir_path, eval_grid_width=832
+        file_paths, use_veg_indices, num_proc, polygon_dir, base_dir_path, input_grid_width=832
 ):
     delete_directory_contents(polygon_dir/'elevation_cut')
     delete_directory_contents(polygon_dir/'sentinel_4326_cut')
@@ -72,7 +72,7 @@ def cut_next_file_set(
 
         data, _, _ = open_all_and_merge(
             sentinel_path=sentinel_path, elevation_path=elevation_path, make_indices=use_veg_indices,
-            shape=(1, eval_grid_width, eval_grid_width)
+            shape=(1, input_grid_width, input_grid_width)
         )
         data = fill_missing_data(data)
         if not np.any(np.isnan(data)):
@@ -89,7 +89,7 @@ def cut_next_file_set(
 
 def predict_on_all_sen_data_multi(
         model_number, polygon_dir, use_veg_indices=True, num_per=1, output_name='output_data',
-        base_dir_path=ppaths.deploy_data, num_proc=16, eval_grid_width=832, **kwargs
+        base_dir_path=ppaths.deploy_data, num_proc=16, input_grid_width=832, **kwargs
 ):
     with torch.no_grad():
         model_container = ModelTrainingContainer.load_container(model_number=model_number)
@@ -106,7 +106,7 @@ def predict_on_all_sen_data_multi(
         num_files = len(temp_paths)
         cut_next_file_set(
             file_paths=temp_paths[0:num_per], polygon_dir=polygon_dir, use_veg_indices=use_veg_indices,
-            num_proc=num_proc, base_dir_path=base_dir_path, eval_grid_width=eval_grid_width
+            num_proc=num_proc, base_dir_path=base_dir_path, input_grid_width=input_grid_width
         )
         file_ind = num_per
         current_ind = 0
@@ -115,7 +115,7 @@ def predict_on_all_sen_data_multi(
             file_paths = temp_paths[file_ind:file_ind+num_per]
             inputs = dict(
                 file_paths=file_paths, polygon_dir=polygon_dir, use_veg_indices=use_veg_indices, num_proc=num_proc,
-                base_dir_path=base_dir_path, eval_grid_width=eval_grid_width
+                base_dir_path=base_dir_path, input_grid_width=input_grid_width
             )
             proc = Process(target=cut_next_file_set, kwargs=inputs)
             proc.start()

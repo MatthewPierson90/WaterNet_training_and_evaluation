@@ -6,7 +6,7 @@ from water.training.test_model import evaluate_on_all_sen_data_multi
 
 
 if __name__ == '__main__':
-    model_number = 841
+    model_number = 1
     max_per_it = 32
 
     kwargs = dict(

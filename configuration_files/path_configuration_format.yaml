@@ -1,0 +1,23 @@
+# To set custom paths, make a copy of this file titled "path_configurations.yaml" in the configuration_files directory.
+# Uncomment whichever path you would like to set as custom, and put the absolute path to the directory/ file you would
+# like to use. Most of these are directories, but the type has been noted.
+
+#training_data: # directory
+#world_info: # directory
+#deploy_data: # directory
+#elevation: # directory
+#sentinel_unmerged: # directory
+#sentinel_merged: # directory
+#tdx_basins: # directory
+#tdx_streams: # directory
+#hu4_data: # directory
+#hu4_parquet: # directory
+#hu4_hull: # directory
+#hu4_hulls.parquet: # file
+#sentinel_tiles.parquet: # file
+#world_boundaries.parquet: # file
+#elevation_cut: # directory
+#sentinel_cut: # directory
+#waterways_burned: # directory
+#model_inputs_832: # directory
+#model_inputs_224: # directory

@@ -7,13 +7,24 @@ from water.training.batch_scheduler import BatchSizeScheduler
 from water.training.model_container import ModelTrainingContainer
 from water.training.training_loop_data_increase import train_model
 
+# The first training loop uses model_inputs_224, the second uses model_inputs_832. If you run into memory issues,
+# you can change both the batch size and/or the number of images loaded.
+
+
 if __name__ == '__main__':
-    load_path_dict = {}
     dec_steps = 1
     num_encoders = 5
     dtype = torch.bfloat16
     device = 'cuda'
-    use_pruned_data = False
+    augment_data_1 = True
+    batch_size_1 = 50
+    num_training_images_per_load_1 = 500
+    num_test_images_per_load_1 = 2500
+
+    batch_size_2 = 4
+    num_training_images_per_load_2 = 200
+    num_test_images_per_load_2 = 400
+
     mult = 2.0
     ww_value_dict = {
         1: 0.0, # playa
@@ -47,51 +58,32 @@ if __name__ == '__main__':
                     padding_mode='zeros', device=device
             ),
             'loss_class': WaterwayLossDecTanimoto,
-            # 'loss_class': WaterwayLossDecW1,
             'loss_kwargs': dict(num_factors=dec_steps, tanimoto_weight=0.7),
             'optimizer_class': torch.optim.SGD,
             'optimizer_kwargs': dict(lr=.0625, momentum=0.9, weight_decay=.0001),
-            # 'optimizer_class': torch.optim.Adam,
-            # 'optimizer_kwargs': dict(lr=0.0001, betas=(0.9, 0.999), weight_decay=1e-5),
             'scheduler_class': BatchSizeScheduler,
             'scheduler_kwargs': dict(mode='max', step_size=1, patience=15, initial_iterations=1),
             'min_max': 'max', 'step_metric': 'f1'
         }
     }
-    # model_container = ModelTrainingContainer.from_inputs(
-    #         container_inputs=container_inputs, device=device,
-    #         dtype=dtype, is_terminal=True, num_epochs=3
-    # )
-    # model_container = ModelTrainingContainer.copy_container(
-    #     838, num_epochs=3, copy_optimizer=False, copy_lr_scheduler=False
-    # )
-    # model_container = ModelTrainingContainer.load_container(840, num_epochs=3, ckpt=7)
-    # model_container.current_iteration = 8
-    # model_container.model_container.schedule_dict['wwm'].required_iterations = 2
-    # data_loader = SenElBurnedLoader(
-    #     el_base=ppaths.training_data/'model_inputs_224/temp_cut', elevation_name='elevation_cut',
-    #     value_dict=ww_value_dict
-    # )
-    # data_load = WaterwayDataLoaderV3(
-    #         num_training_images_per_load=1000,
-    #         use_pruned_data=False, num_test_inds=2500,
-    #         base_path=ppaths.training_data/'model_inputs_224',
-    #         data_loader=data_loader
-    # )
-    # data_load = WaterwayDataLoaderV3.load(
-    #     model_number=840, data_loader=data_loader, clear_temp=False
-    # )
-    # train_model(
-    #         model_container=model_container, data_loader=data_load, batch_size=50, train_save_steps=1,
-    #         percent_data_per_inner_loop=1, augment_data=False, num_y=1, test_every_n=8,  test_save_steps=1
-    # )
-
-    # model_number = model_container.model_number
-    # del model_container
-    model_container = ModelTrainingContainer.copy_container(
-        model_number=840, copy_optimizer=False, copy_lr_scheduler=False, num_epochs=5
+    model_container = ModelTrainingContainer.from_inputs(
+            container_inputs=container_inputs, device=device, dtype=dtype, is_terminal=True, num_epochs=3
     )
-    # model_container = ModelTrainingContainer.load_container(model_number=842, num_epochs=5, ckpt=7)
+    data_loader = SenElBurnedLoader(value_dict=ww_value_dict)
+    data_load = WaterwayDataLoader(
+        num_training_images_per_load=num_training_images_per_load_1, use_pruned_data=False, data_loader=data_loader,
+        num_test_inds=num_test_images_per_load_1, base_path=ppaths.model_inputs_224
+    )
+    train_model(
+            model_container=model_container, data_loader=data_load, batch_size=batch_size_1, train_save_steps=1,
+            percent_data_per_inner_loop=1, augment_data=augment_data_1, num_y=1, test_every_n=8,  test_save_steps=1
+    )
+
+    model_number = model_container.model_number
+    del model_container
+    model_container = ModelTrainingContainer.copy_container(
+        model_number=model_number, copy_optimizer=False, copy_lr_scheduler=False, num_epochs=5
+    )
     model_container.model_container.schedule_dict['wwm'].current_best = 0
     model_container.model_container.schedule_dict['wwm'].required_iterations = 5
     model_container.model_container.schedule_dict['wwm'].step_size = 1
@@ -99,13 +91,10 @@ if __name__ == '__main__':
     model_container.set_lr(.01, model_name='wwm')
     data_loader = SenElBurnedLoader(value_dict=ww_value_dict)
     data_load = WaterwayDataLoader(
-        num_training_images_per_load=200, num_test_inds=400, use_pruned_data=False,
-        base_path=ppaths.model_inputs_832, data_loader=data_loader,
+        num_training_images_per_load=num_training_images_per_load_2, num_test_inds=num_test_images_per_load_2,
+        use_pruned_data=False, base_path=ppaths.model_inputs_832, data_loader=data_loader,
     )
-    # data_load = WaterwayDataLoaderV3.load(
-    #     842, data_loader=data_loader, clear_temp=False, current_index=14400
-    # )
     train_model(
-            model_container=model_container, data_loader=data_load, batch_size=4, train_save_steps=3,
+            model_container=model_container, data_loader=data_load, batch_size=batch_size_2, train_save_steps=3,
             percent_data_per_inner_loop=1, augment_data=False, num_y=1, test_every_n=8, test_save_steps=10
     )

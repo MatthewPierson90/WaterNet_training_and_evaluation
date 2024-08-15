@@ -64,3 +64,17 @@ from water.data_functions.prepare.make_test_val_lists import move_hu4_test_and_v
 hu4_index_list = [103,204,309,403,505,601,701,805,904,1008,1110,1203,1302,1403,1505,1603,1708,1804]
 # hu4_index_list = None
 move_hu4_test_and_val_data(hu4_index_list)
+
+# If all of the data looks good, then at this point you can delete the contents of
+# ppaths.sentinel_cut, ppaths.elevation_cut, ppaths.waterways_burned, and ppaths.training_data/'reference_grids'
+
+print(ppaths.sentinel_cut)
+print(ppaths.elevation_cut)
+print(ppaths.waterways_burned)
+print(ppaths.training_data/'reference_grids')
+
+from water.basic_functions import delete_directory_contents
+# delete_directory_contents(ppaths.sentinel_cut)
+# delete_directory_contents(ppaths.elevation_cut)
+# delete_directory_contents(ppaths.waterways_burned)
+# delete_directory_contents(ppaths.training_data/'reference_grids')
