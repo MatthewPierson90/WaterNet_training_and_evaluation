@@ -46,3 +46,10 @@ their desired region. The module function that should be used is
 
 As a note, it is assumed that you have downloaded the appropriate sentinel data and elevation data for the polygon you
 intend to run this on, and that that data is stored in the sentinel_merged and elevation directories respectively.
+
+# Related Repositories
+
+
+[WaterNet](https://github.com/Better-Planet-Laboratory/waterways_training_and_evaluation)
+
+[WaterNet Vectorize](https://github.com/Better-Planet-Laboratory/waterways_vectorize)
