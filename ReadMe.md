@@ -24,6 +24,8 @@ sentinel_merged: /Drive1/sentinel_merged
 sentinel_unmerged: /Drive2/waterways_data/sentinel_raw
 ```
 
+## Installation
+
 # Data Download for Training
 
 The [data download scripts](./scripts/data_downloads) in should be run in the following order:
@@ -50,6 +52,5 @@ intend to run this on, and that that data is stored in the sentinel_merged and e
 # Related Repositories
 
 
-[WaterNet](https://github.com/Better-Planet-Laboratory/waterways_training_and_evaluation)
-
-[WaterNet Vectorize](https://github.com/Better-Planet-Laboratory/waterways_vectorize)
+ * [WaterNet](https://github.com/Better-Planet-Laboratory/waterways_training_and_evaluation)
+ * [WaterNet Vectorize](https://github.com/Better-Planet-Laboratory/waterways_vectorize)

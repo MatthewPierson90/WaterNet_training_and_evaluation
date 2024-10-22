@@ -113,14 +113,6 @@ def download_bbox_list_elevation_data(
     ).run()
 
 
-if __name__ == '__main__':
-    bb_list = [
-        (-109.05919619986199,36.99275055519555,-102.04212644366443,41.00198213121131),
-        (-111.05843295392954,40.995109653686534,-104.05213107971079,45.006059349083486)
-    ]
-    its = download_bbox_list_elevation_data(bb_list)
-
-
 def download_polygon_list_elevation_data(
         polygon_list: list[shapely.Polygon], num_proc: int = 4, save_dir: Path = ppaths.elevation_data,
         print_progress: bool = True, force_download: bool = False
