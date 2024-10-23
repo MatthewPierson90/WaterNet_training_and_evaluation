@@ -26,6 +26,28 @@ sentinel_unmerged: /Drive2/waterways_data/sentinel_raw
 
 ## Installation
 
+Installation requires pytorch and [WaterNet](https://github.com/Better-Planet-Laboratory/WaterNet). You may also want to install
+[WaterNet Vectorize](https://github.com/Better-Planet-Laboratory/WaterNet_vectorize).
+
+All code was prototyped using python 3.11.4 and pip 23.0.1.
+
+A python environment and version handler such as [pyenv](https://github.com/pyenv/pyenv) should make those easy to obtain.
+
+After getting your environment setup correctly, download this repository and use pip to install:
+
+```
+git clone https://github.com/Better-Planet-Laboratory/WaterNet_training_and_evaluation.git
+cd WaterNet_training_and_evaluation
+pip install .
+```
+
+or if you wish to edit to code
+
+``
+pip install -e .
+``
+
+
 # Data Download for Training
 
 The [data download scripts](./scripts/data_downloads) in should be run in the following order:
@@ -52,5 +74,5 @@ intend to run this on, and that that data is stored in the sentinel_merged and e
 # Related Repositories
 
 
- * [WaterNet](https://github.com/Better-Planet-Laboratory/waterways_training_and_evaluation)
- * [WaterNet Vectorize](https://github.com/Better-Planet-Laboratory/waterways_vectorize)
+ * [WaterNet](https://github.com/Better-Planet-Laboratory/WaterNet)
+ * [WaterNet Vectorize](https://github.com/Better-Planet-Laboratory/WaterNet_vectorize)
